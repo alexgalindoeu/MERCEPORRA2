@@ -6,6 +6,21 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>⚽ Porra Mundial 2026 — Football Knowledge</title>
+
+<!-- PWA: instalable como app en móvil -->
+<link rel="manifest" href="./site.webmanifest">
+<meta name="theme-color" content="#00ff88">
+<meta name="application-name" content="MercePorra">
+<meta name="apple-mobile-web-app-title" content="MercePorra">
+
+<!-- Iconos para todas las plataformas -->
+<link rel="apple-touch-icon" href="./apple-touch-icon.png">
+<link rel="icon" type="image/svg+xml" href="./favicon.svg">
+<link rel="icon" type="image/png" sizes="96x96" href="./favicon-96x96.png">
+<link rel="icon" type="image/png" sizes="192x192" href="./web-app-manifest-192x192.png">
+<link rel="icon" type="image/png" sizes="512x512" href="./web-app-manifest-512x512.png">
+<link rel="shortcut icon" href="./favicon.ico">
+
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <style>
@@ -63,10 +78,6 @@
   .flag { font-size: 22px; line-height: 1; }
   @media (max-width: 380px) { .input-score { width: 42px; height: 42px; font-size: 19px; } }
 </style>
-<link rel="apple-touch-icon" href="./apple-touch-icon.png">
-<link rel="manifest" href="./site.webmanifest">
-<link rel="icon" href="./favicon-96x96.png">
-<link rel="shortcut icon" href="./favicon.ico">
 </head>
 <body class="pb-20">
 
@@ -171,7 +182,7 @@ create policy "open_all_resprem" on resultados_premios   for all using (true) wi
 // CONFIGURACIÓN — RELLENA ESTO ANTES DE NADA
 // ═══════════════════════════════════════════════════════════════
 const SUPABASE_URL  = 'https://grcrloyydcmzecwvuvng.supabase.co'; // ← URL de Supabase (sin /rest/v1/ al final)
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdyY3Jsb3l5ZGNtemVjd3Z1dm5nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3Mzk5NzksImV4cCI6MjA5NjMxNTk3OX0.z4BdIFEBksoO8t4jHFtQyesCd9dPz_oLmGlaiRsEdJ8';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdyY3Jsb3l5ZGNtemVjd3Z1dm5nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3Mzk5NzksImV4cCI6MjA5NjMxNTk3OX0.z4BdIFEBksoOXktgV3m4K5XLqGKhKI79X93JKcxEyMk';
 const ADMIN_PIN     = '7777'; // ⚠ CÁMBIALO ANTES DE COMPARTIR LA APP
 
 // Si dejas SUPABASE_URL vacío, la app funciona en modo offline (solo localStorage)
@@ -512,7 +523,7 @@ const QF_SLOTS = [
   ['QF-1', 1, 2], ['QF-2', 3, 4], ['QF-3', 5, 6], ['QF-4', 7, 8],
 ];
 const SF_SLOTS = [['SF-1', 1, 2], ['SF-2', 3, 4]];
-const FINAL_SLOTS = [['F3', 1, 2, 'tercer'], ['F1', 1, 2, 'final']]; // 3er puesto y final
+const FINAL_SLOTS = [['TERCER', 1, 2, 'tercer'], ['FINAL', 1, 2, 'final']]; // 3er puesto y final
 
 // ═══════════════════════════════════════════════════════════════
 // SUPABASE INIT
@@ -914,15 +925,15 @@ function buildBracket(predicciones) {
   });
 
   // 3er puesto y Final
-  const f3 = predicciones['F3'];
-  const fF = predicciones['F1'];
+  const f3 = predicciones['TERCER'];
+  const fF = predicciones['FINAL'];
   result.tercer = {
-    mid: 'F3',
+    mid: 'TERCER',
     local: result.sf[0]?.perdedor, vis: result.sf[1]?.perdedor,
     pred: f3
   };
   result.final = {
-    mid: 'F1',
+    mid: 'FINAL',
     local: result.sf[0]?.ganador, vis: result.sf[1]?.ganador,
     pred: fF
   };
@@ -957,7 +968,7 @@ function rondaMaxAlcanzada(b, eq) {
 function buscarPartidoEnBracket(b, mid) {
   return b.r32.find(x=>x.mid===mid) || b.r16.find(x=>x.mid===mid) ||
          b.qf.find(x=>x.mid===mid)  || b.sf.find(x=>x.mid===mid)  ||
-         (mid==='F3' ? b.tercer : mid==='F1' ? b.final : null);
+         (mid==='TERCER' ? b.tercer : mid==='FINAL' ? b.final : null);
 }
 
 function puntuarUsuario(predicciones, premiosUser) {
@@ -1348,8 +1359,8 @@ function cardPartidoKO(it, fase) {
   const eqL = it.local ? EQUIPOS[it.local] : null;
   const eqV = it.vis ? EQUIPOS[it.vis] : null;
   const pred = State.predicciones[mid] || {};
-  const isFinal3 = mid === 'F3';
-  const isFinal = mid === 'F1';
+  const isFinal3 = mid === 'TERCER';
+  const isFinal = mid === 'FINAL';
   const label = isFinal ? '🏆 GRAN FINAL' : isFinal3 ? '🥉 3er Puesto' : '';
 
   const disabled = (!eqL || !eqV);
@@ -1393,7 +1404,7 @@ function enlazarInputsPartido() {
       if (isNaN(num)) return;
 
       const partidoGrupo = PARTIDOS_GRUPOS.find(p => p[0] === mid);
-      const fase = partidoGrupo ? 'grupos' : (mid.startsWith('R32')?'r32':mid.startsWith('R16')?'r16':mid.startsWith('QF')?'qf':mid.startsWith('SF')?'sf':mid==='F3'?'tercer':'final');
+      const fase = partidoGrupo ? 'grupos' : (mid.startsWith('R32')?'r32':mid.startsWith('R16')?'r16':mid.startsWith('QF')?'qf':mid.startsWith('SF')?'sf':mid==='TERCER'?'tercer':'final');
 
       const actual = State.predicciones[mid] || {};
       if (side === 'l') actual.gl = num; else actual.gv = num;
@@ -1615,7 +1626,7 @@ function renderResumen() {
 
   main.innerHTML = `
     <div class="grid grid-cols-2 gap-2 mb-4">
-      <div class="card p-3"><div class="text-[10px] uppercase font-bold" style="color:var(--text-dim)">Predicciones</div><div class="text-2xl font-black">${totalPreds}<span class="text-sm font-normal" style="color:var(--text-dim)">/${PARTIDOS_GRUPOS.length + 31}</span></div></div>
+      <div class="card p-3"><div class="text-[10px] uppercase font-bold" style="color:var(--text-dim)">Predicciones</div><div class="text-2xl font-black">${totalPreds}<span class="text-sm font-normal" style="color:var(--text-dim)">/${PARTIDOS_GRUPOS.length + 32}</span></div></div>
       <div class="card p-3"><div class="text-[10px] uppercase font-bold" style="color:var(--text-dim)">Puntos máx posibles</div><div class="text-2xl font-black" style="color:var(--gold)">${puntosMaxTeoricos.toFixed(0)}</div></div>
       <div class="card p-3"><div class="text-[10px] uppercase font-bold" style="color:var(--text-dim)">Puntos actuales</div><div class="text-2xl font-black" style="color:var(--grass)">${previstos.total}</div></div>
       <div class="card p-3"><div class="text-[10px] uppercase font-bold" style="color:var(--text-dim)">En underdogs</div><div class="text-2xl font-black" style="color:var(--gold)">${previstos.underdog.toFixed(1)}</div></div>
@@ -1674,8 +1685,8 @@ function miniBracket(b) {
   return `
     <div class="space-y-3">
       <div><div class="text-[10px] uppercase font-bold mb-1" style="color:var(--text-dim)">Semifinales</div><div class="space-y-1">${b.sf.map(s => pintaPartido(s,'SF')).join('')}</div></div>
-      <div><div class="text-[10px] uppercase font-bold mb-1" style="color:var(--text-dim)">3er puesto</div>${pintaPartido(b.tercer,'F3')}</div>
-      <div><div class="text-[10px] uppercase font-bold mb-1" style="color:var(--gold)">FINAL 🏆</div>${pintaPartido(b.final,'F1')}</div>
+      <div><div class="text-[10px] uppercase font-bold mb-1" style="color:var(--text-dim)">3er puesto</div>${pintaPartido(b.tercer,'TERCER')}</div>
+      <div><div class="text-[10px] uppercase font-bold mb-1" style="color:var(--gold)">FINAL 🏆</div>${pintaPartido(b.final,'FINAL')}</div>
     </div>
   `;
 }
@@ -1691,10 +1702,10 @@ function renderAdmin() {
           <div class="font-bold">⚙ Panel Admin</div>
           <button id="adm-close" class="btn btn-ghost text-xs" style="padding:6px 12px">Cerrar</button>
         </div>
-        <div class="flex scroll-x" style="border-bottom:1px solid var(--border)">
-          <button class="adm-tab tab-btn active" data-atab="cuotas">Cuotas</button>
-          <button class="adm-tab tab-btn" data-atab="resultados">Resultados</button>
-          <button class="adm-tab tab-btn" data-atab="premios">Premios oficiales</button>
+        <div class="flex" style="border-bottom:1px solid var(--border)">
+          <button class="adm-tab tab-btn active" data-atab="cuotas">💰 Cuotas</button>
+          <button class="adm-tab tab-btn" data-atab="resultados">⚽ Resultados</button>
+          <button class="adm-tab tab-btn" data-atab="premios">🏅 Premios</button>
         </div>
         <div id="adm-body" class="flex-1 overflow-y-auto p-4"></div>
       </div>
@@ -1766,7 +1777,7 @@ function renderAdmResultados() {
   function equiposKO(mid) {
     // Devuelve {local, vis} oficiales para un partido KO según los resultados ya metidos
     const buscar = (arr) => arr.find(x => x.mid === mid);
-    return buscar(bracketOficial.r32) || buscar(bracketOficial.r16) || buscar(bracketOficial.qf) || buscar(bracketOficial.sf) || (mid==='F3'?bracketOficial.tercer:mid==='F1'?bracketOficial.final:null);
+    return buscar(bracketOficial.r32) || buscar(bracketOficial.r16) || buscar(bracketOficial.qf) || buscar(bracketOficial.sf) || (mid==='TERCER'?bracketOficial.tercer:mid==='FINAL'?bracketOficial.final:null);
   }
 
   const todos = [
@@ -1775,8 +1786,8 @@ function renderAdmResultados() {
     ...R16_SLOTS.map((s,i) => { const e = equiposKO(s[0]); return { mid:s[0], local:e?.local, vis:e?.vis, etiq:`8vos ${i+1}` }; }),
     ...QF_SLOTS.map((s,i)  => { const e = equiposKO(s[0]); return { mid:s[0], local:e?.local, vis:e?.vis, etiq:`Cuartos ${i+1}` }; }),
     ...SF_SLOTS.map((s,i)  => { const e = equiposKO(s[0]); return { mid:s[0], local:e?.local, vis:e?.vis, etiq:`Semis ${i+1}` }; }),
-    (() => { const e = equiposKO('F3'); return { mid:'F3', local:e?.local, vis:e?.vis, etiq:'3er puesto' }; })(),
-    (() => { const e = equiposKO('F1'); return { mid:'F1', local:e?.local, vis:e?.vis, etiq:'FINAL' }; })(),
+    (() => { const e = equiposKO('TERCER'); return { mid:'TERCER', local:e?.local, vis:e?.vis, etiq:'3er puesto' }; })(),
+    (() => { const e = equiposKO('FINAL');  return { mid:'FINAL',  local:e?.local, vis:e?.vis, etiq:'FINAL' }; })(),
   ];
   body.innerHTML = `
     <p class="text-xs mb-3" style="color:var(--text-dim)">Marca el resultado oficial de cada partido cuando termine. Esto dispara el cálculo de puntos.</p>

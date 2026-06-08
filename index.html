@@ -77,6 +77,35 @@
   details summary::-webkit-details-marker { display: none; }
   .flag { font-size: 22px; line-height: 1; }
   @media (max-width: 380px) { .input-score { width: 42px; height: 42px; font-size: 19px; } }
+  /* ═══ Animación fin de predicciones ═══ */
+.overlay-fin {
+  position: fixed; inset: 0; z-index: 9999;
+  background: rgba(0,0,0,0.92); backdrop-filter: blur(8px);
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  padding: 20px; animation: fadeIn 0.4s ease;
+}
+@keyframes fadeIn { from{opacity:0} to{opacity:1} }
+.overlay-fin video {
+  max-width: 100%; max-height: 55vh; border-radius: 16px;
+  box-shadow: 0 0 60px rgba(255,200,87,0.4);
+}
+.overlay-fin h1 {
+  font-size: 32px; font-weight: 900;
+  background: linear-gradient(135deg, #ffe89c, #ffc857, #b8841e);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  text-align: center; margin: 24px 0 8px;
+  animation: pulseGold 1.5s ease-in-out infinite;
+}
+@keyframes pulseGold { 0%,100%{transform:scale(1)} 50%{transform:scale(1.06)} }
+.overlay-fin .sub { color: #e8f0ec; font-size: 14px; margin-bottom: 24px; text-align: center; }
+.confetti {
+  position: absolute; font-size: 24px; pointer-events: none;
+  animation: fall linear infinite;
+}
+@keyframes fall {
+  0%{transform:translateY(-20px) rotate(0deg); opacity:1}
+  100%{transform:translateY(110vh) rotate(720deg); opacity:0.6}
+}
 </style>
 </head>
 <body class="pb-20">
@@ -1552,6 +1581,9 @@ function enlazarInputsPartido() {
       if (actual.gl != null && actual.gv != null) {
         const cuotas = State.cuotas[mid];
         await guardarPrediccion(mid, actual.gl, actual.gv, fase, cuotas);
+        if (Object.keys(State.predicciones).length === 104) {
+          setTimeout(() => mostrarFinAnimacion(), 400);
+        }
         e.target.classList.add('filled');
         // Repintar para que multiplicador y pill se actualicen
         if (fase === 'grupos') {
@@ -2021,7 +2053,37 @@ function renderAdmPremios() {
     });
   });
 }
+// ═══════════════════════════════════════════════════════════════
+// ANIMACIÓN FIN DE PREDICCIONES (104/104)
+// ═══════════════════════════════════════════════════════════════
+function mostrarFinAnimacion(force = false) {
+  if (!State.user) return;
+  const key = 'porra_fin_visto_' + State.user.id;
+  if (!force && localStorage.getItem(key)) return; // solo se muestra una vez
 
+  const overlay = el(`
+    <div class="overlay-fin" id="overlay-fin">
+      <video autoplay loop muted playsinline src="./merino.mp4"></video>
+      <h1>¡LA SUERTE ESTÁ ECHADA!</h1>
+      <div class="sub">104/104 predicciones · Suerte, ${State.user.nombre} ⚽</div>
+      <button id="btn-cerrar-fin" class="btn btn-primary">Cerrar</button>
+    </div>
+  `);
+  // Confeti random
+  const emojis = ['🎉','🎊','🏆','⚽','✨','🥇','🎯'];
+  for (let i = 0; i < 22; i++) {
+    const c = document.createElement('div');
+    c.className = 'confetti';
+    c.textContent = emojis[Math.floor(Math.random()*emojis.length)];
+    c.style.left = Math.random() * 100 + 'vw';
+    c.style.animationDelay = (Math.random() * 2) + 's';
+    c.style.animationDuration = (2.5 + Math.random()*2) + 's';
+    overlay.appendChild(c);
+  }
+  document.body.appendChild(overlay);
+  $('#btn-cerrar-fin').addEventListener('click', () => overlay.remove());
+  localStorage.setItem(key, '1');
+}
 // ═══════════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════════
@@ -2032,6 +2094,9 @@ async function initApp() {
   if (State.user) {
     await cargarPredicciones(State.user.id);
     await cargarMisPremios(State.user.id);
+  }
+if (State.user && Object.keys(State.predicciones).length === 104) {
+    setTimeout(() => mostrarFinAnimacion(), 1000);
   }
   renderShell();
 }

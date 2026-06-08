@@ -1,0 +1,1586 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title> MercePorra Mundial 2026</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  :root {
+    --bg-deep: #0a0f0d;
+    --bg-card: #131c18;
+    --bg-card-2: #1a2620;
+    --grass: #00ff88;
+    --grass-dim: #00cc6e;
+    --gold: #ffc857;
+    --gold-dim: #d4a437;
+    --text: #e8f0ec;
+    --text-dim: #8a9a93;
+    --border: #243029;
+    --danger: #ff5470;
+    --warn: #ffb547;
+  }
+  * { -webkit-tap-highlight-color: transparent; }
+  html, body { background: var(--bg-deep); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif; }
+  body { background-image: radial-gradient(ellipse at top, rgba(0,255,136,0.04) 0%, transparent 50%), radial-gradient(ellipse at bottom, rgba(255,200,87,0.03) 0%, transparent 50%); min-height: 100vh; }
+  .card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; }
+  .card-2 { background: var(--bg-card-2); border: 1px solid var(--border); border-radius: 12px; }
+  .pill { padding: 2px 10px; border-radius: 999px; font-size: 11px; font-weight: 700; letter-spacing: 0.3px; display: inline-flex; align-items: center; gap: 4px; }
+  .pill-x1   { background: rgba(138,154,147,0.18); color: #b8c5be; }
+  .pill-x12  { background: rgba(0,255,136,0.12);   color: var(--grass); }
+  .pill-x14  { background: rgba(255,200,87,0.15);  color: var(--gold); }
+  .pill-x16  { background: rgba(255,84,112,0.18);  color: var(--danger); }
+  .input-score { background: var(--bg-deep); border: 1px solid var(--border); border-radius: 10px; width: 48px; height: 48px; text-align: center; font-size: 22px; font-weight: 700; color: var(--text); transition: all .15s; }
+  .input-score:focus { outline: none; border-color: var(--grass); box-shadow: 0 0 0 3px rgba(0,255,136,0.15); }
+  .input-score.filled { border-color: var(--grass-dim); }
+  .btn { padding: 12px 18px; border-radius: 12px; font-weight: 700; transition: all .15s; font-size: 14px; }
+  .btn-primary { background: var(--grass); color: #001a0e; }
+  .btn-primary:hover:not(:disabled) { background: var(--grass-dim); transform: translateY(-1px); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-gold { background: var(--gold); color: #2a1d00; }
+  .btn-ghost { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  .btn-ghost:hover { background: var(--bg-card-2); }
+  .tab-btn { flex: 1; padding: 14px 8px; font-weight: 600; font-size: 13px; color: var(--text-dim); position: relative; transition: all .2s; }
+  .tab-btn.active { color: var(--grass); }
+  .tab-btn.active::after { content: ''; position: absolute; bottom: 0; left: 20%; right: 20%; height: 3px; background: var(--grass); border-radius: 3px 3px 0 0; }
+  .float-save { position: fixed; bottom: 80px; right: 18px; z-index: 50; box-shadow: 0 8px 24px rgba(0,255,136,0.3); }
+  .save-ok { animation: pulseOk 0.6s ease; }
+  @keyframes pulseOk { 0%{transform:scale(1)} 50%{transform:scale(1.08); box-shadow: 0 0 0 12px rgba(0,255,136,0)} 100%{transform:scale(1)} }
+  .skel { background: linear-gradient(90deg, var(--bg-card) 0%, var(--bg-card-2) 50%, var(--bg-card) 100%); background-size: 200% 100%; animation: skel 1.2s infinite; }
+  @keyframes skel { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+  .pin-dot { width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--border); margin: 0 6px; transition: all .15s; }
+  .pin-dot.filled { background: var(--grass); border-color: var(--grass); }
+  .modal-bg { background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); }
+  .scroll-x { overflow-x: auto; scrollbar-width: none; }
+  .scroll-x::-webkit-scrollbar { display: none; }
+  .badge-master { background: linear-gradient(135deg, var(--gold), #ff8c42); color: #2a1d00; }
+  .glow-grass { box-shadow: 0 0 20px rgba(0,255,136,0.15); }
+  details summary { list-style: none; cursor: pointer; }
+  details summary::-webkit-details-marker { display: none; }
+  .flag { font-size: 22px; line-height: 1; }
+  @media (max-width: 380px) { .input-score { width: 42px; height: 42px; font-size: 19px; } }
+</style>
+</head>
+<body class="pb-20">
+
+<!--
+═══════════════════════════════════════════════════════════════
+  SQL PARA CREAR EN SUPABASE (consola → SQL Editor → run)
+═══════════════════════════════════════════════════════════════
+
+create table if not exists usuarios (
+  id uuid primary key default gen_random_uuid(),
+  nombre text unique not null,
+  pin_hash text not null,
+  created_at timestamptz default now()
+);
+
+create table if not exists predicciones (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid references usuarios(id) on delete cascade,
+  match_id text not null,
+  gol_local int not null,
+  gol_visitante int not null,
+  tendencia text not null,           -- '1' | 'X' | '2'
+  cuota_apostada numeric,
+  multiplicador numeric,
+  fase text not null,                -- 'grupos' | 'r32' | 'r16' | 'qf' | 'sf' | 'tercer' | 'final'
+  updated_at timestamptz default now(),
+  unique(user_id, match_id)
+);
+
+create table if not exists resultados (
+  match_id text primary key,
+  gol_local int not null,
+  gol_visitante int not null,
+  updated_at timestamptz default now()
+);
+
+create table if not exists cuotas (
+  match_id text primary key,
+  cuota_1 numeric not null,
+  cuota_x numeric not null,
+  cuota_2 numeric not null,
+  fuente text default 'estimacion',
+  updated_at timestamptz default now()
+);
+
+create table if not exists config (
+  key text primary key,
+  value jsonb not null
+);
+
+-- Permitir lectura/escritura anónima (es una porra de cuadrilla, no datos sensibles)
+alter table usuarios enable row level security;
+alter table predicciones enable row level security;
+alter table resultados enable row level security;
+alter table cuotas enable row level security;
+alter table config enable row level security;
+
+create policy "open_read"  on usuarios     for select using (true);
+create policy "open_write" on usuarios     for insert with check (true);
+create policy "open_all_pred"   on predicciones for all using (true) with check (true);
+create policy "open_read_res"   on resultados   for select using (true);
+create policy "open_write_res"  on resultados   for all using (true) with check (true);
+create policy "open_read_cuo"   on cuotas       for select using (true);
+create policy "open_write_cuo"  on cuotas       for all using (true) with check (true);
+create policy "open_all_conf"   on config       for all using (true) with check (true);
+
+═══════════════════════════════════════════════════════════════
+-->
+
+<div id="app">
+  <div class="flex items-center justify-center min-h-screen">
+    <div class="text-center">
+      <div class="text-5xl mb-3">⚽</div>
+      <div class="text-grass-dim animate-pulse" style="color: var(--grass)">Cargando...</div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// CONFIGURACIÓN — RELLENA ESTO ANTES DE NADA
+// ═══════════════════════════════════════════════════════════════
+const SUPABASE_URL  = 'https://grcrloyydcmzecwvuvng.supabase.co/rest/v1/'; // ← Pega aquí tu URL de Supabase
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdyY3Jsb3l5ZGNtemVjd3Z1dm5nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3Mzk5NzksImV4cCI6MjA5NjMxNTk3OX0.z4BdIFEBksoO8t4jHFtQyesCd9dPz_oLmGlaiRsEdJ8'; // ← Pega aquí tu anon key
+const ADMIN_PIN     = '7777'; // ← Cámbialo. Solo tú lo sabes.
+
+// Si dejas SUPABASE_URL vacío, la app funciona en modo offline (solo localStorage)
+// — útil para testear. Pero la porra real necesita Supabase para la nube.
+
+// ═══════════════════════════════════════════════════════════════
+// CONSTANTES DE PUNTUACIÓN
+// ═══════════════════════════════════════════════════════════════
+const PUNTOS_BASE = 3;
+const BONUS_EXACTO = 5;
+const UNDERDOG_THRESHOLD = 1.4; // mult >= 1.4 cuenta para Underdog Master
+
+function multiplicadorPorCuota(cuota) {
+  if (cuota <= 1.5) return 1.0;
+  if (cuota <= 2.5) return 1.2;
+  if (cuota <= 5.0) return 1.4;
+  return 1.6;
+}
+function pillClassMult(m) {
+  if (m === 1.0) return 'pill-x1';
+  if (m === 1.2) return 'pill-x12';
+  if (m === 1.4) return 'pill-x14';
+  return 'pill-x16';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// DATOS DEL MUNDIAL 2026 (sorteo 5-dic-2025, playoffs cerrados)
+// ═══════════════════════════════════════════════════════════════
+const EQUIPOS = {
+  // grupo: bandera emoji, nombre corto, ranking FIFA aprox
+  MEX: { flag:'🇲🇽', name:'México',    rank:15 },
+  RSA: { flag:'🇿🇦', name:'Sudáfrica', rank:59 },
+  KOR: { flag:'🇰🇷', name:'Corea Rep', rank:23 },
+  CZE: { flag:'🇨🇿', name:'Chequia',   rank:36 },
+
+  CAN: { flag:'🇨🇦', name:'Canadá',    rank:30 },
+  BIH: { flag:'🇧🇦', name:'Bosnia',    rank:74 },
+  QAT: { flag:'🇶🇦', name:'Qatar',     rank:53 },
+  SUI: { flag:'🇨🇭', name:'Suiza',     rank:18 },
+
+  BRA: { flag:'🇧🇷', name:'Brasil',    rank:5  },
+  MAR: { flag:'🇲🇦', name:'Marruecos', rank:14 },
+  HAI: { flag:'🇭🇹', name:'Haití',     rank:84 },
+  SCO: { flag:'🏴󠁧󠁢󠁳󠁣󠁴󠁿', name:'Escocia',   rank:33 },
+
+  USA: { flag:'🇺🇸', name:'EE.UU.',    rank:16 },
+  PAR: { flag:'🇵🇾', name:'Paraguay',  rank:42 },
+  AUS: { flag:'🇦🇺', name:'Australia', rank:26 },
+  TUR: { flag:'🇹🇷', name:'Turquía',   rank:27 },
+
+  GER: { flag:'🇩🇪', name:'Alemania',  rank:9  },
+  CUW: { flag:'🇨🇼', name:'Curazao',   rank:82 },
+  CIV: { flag:'🇨🇮', name:'C. Marfil', rank:41 },
+  ECU: { flag:'🇪🇨', name:'Ecuador',   rank:24 },
+
+  NED: { flag:'🇳🇱', name:'Holanda',   rank:7  },
+  JPN: { flag:'🇯🇵', name:'Japón',     rank:17 },
+  SWE: { flag:'🇸🇪', name:'Suecia',    rank:39 },
+  TUN: { flag:'🇹🇳', name:'Túnez',     rank:50 },
+
+  BEL: { flag:'🇧🇪', name:'Bélgica',   rank:8  },
+  EGY: { flag:'🇪🇬', name:'Egipto',    rank:34 },
+  IRN: { flag:'🇮🇷', name:'Irán',      rank:20 },
+  NZL: { flag:'🇳🇿', name:'N. Zelanda',rank:86 },
+
+  ESP: { flag:'🇪🇸', name:'España',    rank:1  },
+  CPV: { flag:'🇨🇻', name:'Cabo Verde',rank:70 },
+  KSA: { flag:'🇸🇦', name:'A. Saudí',  rank:60 },
+  URU: { flag:'🇺🇾', name:'Uruguay',   rank:12 },
+
+  FRA: { flag:'🇫🇷', name:'Francia',   rank:3  },
+  SEN: { flag:'🇸🇳', name:'Senegal',   rank:19 },
+  IRQ: { flag:'🇮🇶', name:'Irak',      rank:58 },
+  NOR: { flag:'🇳🇴', name:'Noruega',   rank:38 },
+
+  ARG: { flag:'🇦🇷', name:'Argentina', rank:2  },
+  ALG: { flag:'🇩🇿', name:'Argelia',   rank:35 },
+  AUT: { flag:'🇦🇹', name:'Austria',   rank:22 },
+  JOR: { flag:'🇯🇴', name:'Jordania',  rank:64 },
+
+  POR: { flag:'🇵🇹', name:'Portugal',  rank:6  },
+  COD: { flag:'🇨🇩', name:'RD Congo',  rank:55 },
+  UZB: { flag:'🇺🇿', name:'Uzbekistán',rank:57 },
+  COL: { flag:'🇨🇴', name:'Colombia',  rank:13 },
+
+  ENG: { flag:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', name:'Inglaterra',rank:4  },
+  CRO: { flag:'🇭🇷', name:'Croacia',   rank:10 },
+  GHA: { flag:'🇬🇭', name:'Ghana',     rank:73 },
+  PAN: { flag:'🇵🇦', name:'Panamá',    rank:32 },
+};
+
+const GRUPOS = {
+  A: ['MEX','RSA','KOR','CZE'],
+  B: ['CAN','BIH','QAT','SUI'],
+  C: ['BRA','MAR','HAI','SCO'],
+  D: ['USA','PAR','AUS','TUR'],
+  E: ['GER','CUW','CIV','ECU'],
+  F: ['NED','JPN','SWE','TUN'],
+  G: ['BEL','EGY','IRN','NZL'],
+  H: ['ESP','CPV','KSA','URU'],
+  I: ['FRA','SEN','IRQ','NOR'],
+  J: ['ARG','ALG','AUT','JOR'],
+  K: ['POR','COD','UZB','COL'],
+  L: ['ENG','CRO','GHA','PAN'],
+};
+
+// Partidos fase de grupos: [id, grupo, local, visitante, fecha, jornada]
+const PARTIDOS_GRUPOS = [const { data: users } = await supa.from('usuarios').select('id, nombre');
+  // J1
+  ['A1','A','MEX','RSA','11 Jun',1],['A2','A','KOR','CZE','11 Jun',1],
+  ['B1','B','CAN','BIH','12 Jun',1],['B2','B','QAT','SUI','13 Jun',1],
+  ['C1','C','BRA','MAR','13 Jun',1],['C2','C','HAI','SCO','13 Jun',1],
+  ['D1','D','USA','PAR','12 Jun',1],['D2','D','AUS','TUR','13 Jun',1],
+  ['E1','E','GER','CUW','14 Jun',1],['E2','E','CIV','ECU','14 Jun',1],
+  ['F1','F','NED','JPN','14 Jun',1],['F2','F','SWE','TUN','14 Jun',1],
+  ['G1','G','BEL','EGY','15 Jun',1],['G2','G','IRN','NZL','15 Jun',1],
+  ['H1','H','ESP','CPV','15 Jun',1],['H2','H','KSA','URU','15 Jun',1],
+  ['I1','I','FRA','SEN','16 Jun',1],['I2','I','IRQ','NOR','16 Jun',1],
+  ['J1','J','ARG','ALG','16 Jun',1],['J2','J','AUT','JOR','16 Jun',1],
+  ['K1','K','POR','COD','17 Jun',1],['K2','K','UZB','COL','17 Jun',1],
+  ['L1','L','ENG','CRO','17 Jun',1],['L2','L','GHA','PAN','17 Jun',1],
+  // J2
+  ['A3','A','CZE','RSA','18 Jun',2],['A4','A','MEX','KOR','18 Jun',2],
+  ['B3','B','SUI','BIH','18 Jun',2],['B4','B','CAN','QAT','18 Jun',2],
+  ['C3','C','SCO','MAR','19 Jun',2],['C4','C','BRA','HAI','19 Jun',2],
+  ['D3','D','USA','AUS','19 Jun',2],['D4','D','TUR','PAR','19 Jun',2],
+  ['E3','E','GER','CIV','20 Jun',2],['E4','E','ECU','CUW','20 Jun',2],
+  ['F3','F','NED','SWE','20 Jun',2],['F4','F','TUN','JPN','20 Jun',2],
+  ['G3','G','BEL','IRN','21 Jun',2],['G4','G','NZL','EGY','21 Jun',2],
+  ['H3','H','ESP','KSA','21 Jun',2],['H4','H','URU','CPV','21 Jun',2],
+  ['I3','I','FRA','IRQ','22 Jun',2],['I4','I','NOR','SEN','22 Jun',2],
+  ['J3','J','ARG','AUT','22 Jun',2],['J4','J','JOR','ALG','22 Jun',2],
+  ['K3','K','POR','UZB','23 Jun',2],['K4','K','COL','COD','23 Jun',2],
+  ['L3','L','ENG','GHA','23 Jun',2],['L4','L','PAN','CRO','23 Jun',2],
+  // J3
+  ['A5','A','CZE','MEX','24 Jun',3],['A6','A','RSA','KOR','24 Jun',3],
+  ['B5','B','SUI','CAN','24 Jun',3],['B6','B','BIH','QAT','24 Jun',3],
+  ['C5','C','SCO','BRA','24 Jun',3],['C6','C','MAR','HAI','24 Jun',3],
+  ['D5','D','TUR','USA','25 Jun',3],['D6','D','PAR','AUS','25 Jun',3],
+  ['E5','E','CUW','CIV','25 Jun',3],['E6','E','ECU','GER','25 Jun',3],
+  ['F5','F','JPN','SWE','25 Jun',3],['F6','F','TUN','NED','25 Jun',3],
+  ['G5','G','EGY','IRN','26 Jun',3],['G6','G','NZL','BEL','26 Jun',3],
+  ['H5','H','CPV','KSA','26 Jun',3],['H6','H','URU','ESP','26 Jun',3],
+  ['I5','I','NOR','FRA','26 Jun',3],['I6','I','SEN','IRQ','26 Jun',3],
+  ['J5','J','JOR','ARG','27 Jun',3],['J6','J','ALG','AUT','27 Jun',3],
+  ['K5','K','COL','POR','27 Jun',3],['K6','K','COD','UZB','27 Jun',3],
+  ['L5','L','PAN','ENG','27 Jun',3],['L6','L','CRO','GHA','27 Jun',3],
+];
+
+// Cuotas iniciales ESTIMADAS (1, X, 2) — sobreescribir desde panel Admin
+// Basadas en cuotas reales FanDuel "ganador de grupo" + ranking FIFA + diferencia de fuerza
+const CUOTAS_INICIALES = {
+  A1:[1.40,4.50,8.50],  A2:[2.30,3.20,3.10],  A3:[3.20,3.30,2.20],  A4:[1.55,3.80,6.50],
+  A5:[3.50,3.20,2.10],  A6:[2.70,3.20,2.70],
+  B1:[1.65,3.70,5.50],  B2:[3.00,3.20,2.40],  B3:[1.50,4.00,6.50],  B4:[2.20,3.20,3.40],
+  B5:[2.50,3.10,3.00],  B6:[2.10,3.10,3.80],
+  C1:[1.50,4.30,7.00],  C2:[2.80,3.20,2.55],  C3:[2.70,3.10,2.75],  C4:[1.20,6.50,15.0],
+  C5:[15.0,7.00,1.20],  C6:[2.10,3.20,3.70],
+  D1:[1.95,3.40,4.00],  D2:[2.30,3.20,3.20],  D3:[1.85,3.50,4.20],  D4:[2.55,3.20,2.85],
+  D5:[2.75,3.20,2.65],  D6:[2.50,3.20,2.90],
+  E1:[1.25,6.00,12.0],  E2:[2.20,3.20,3.40],  E3:[1.75,3.70,4.80],  E4:[2.10,3.30,3.70],
+  E5:[3.80,3.30,2.00],  E6:[3.50,3.30,2.15],
+  F1:[1.55,4.00,6.00],  F2:[2.50,3.20,2.90],  F3:[2.10,3.30,3.60],  F4:[3.20,3.30,2.30],
+  F5:[2.50,3.20,2.90],  F6:[5.50,3.80,1.65],
+  G1:[1.50,4.20,6.80],  G2:[1.85,3.50,4.50],  G3:[2.50,3.10,2.95],  G4:[5.00,3.70,1.70],
+  G5:[2.55,3.10,2.90],  G6:[6.50,4.00,1.55],
+  H1:[1.20,6.50,15.0],  H2:[3.40,3.20,2.20],  H3:[1.25,6.00,12.0],  H4:[2.10,3.20,3.60],
+  H5:[2.80,3.10,2.65],  H6:[4.50,3.60,1.80],
+  I1:[1.40,4.50,8.00],  I2:[2.80,3.20,2.60],  I3:[1.35,5.00,9.00],  I4:[2.60,3.10,2.85],
+  I5:[5.00,3.70,1.70],  I6:[1.75,3.50,4.80],
+  J1:[1.30,5.50,10.0],  J2:[2.20,3.10,3.40],  J3:[1.85,3.50,4.50],  J4:[3.50,3.20,2.10],
+  J5:[10.0,5.50,1.30],  J6:[2.30,3.10,3.30],
+  K1:[1.45,4.50,7.50],  K2:[2.50,3.10,2.90],  K3:[2.20,3.20,3.40],  K4:[1.95,3.30,4.00],
+  K5:[3.00,3.20,2.45],  K6:[3.60,3.20,2.05],
+  L1:[1.95,3.40,4.00],  L2:[1.85,3.40,4.50],  L3:[1.45,4.50,7.00],  L4:[5.50,3.80,1.65],
+  L5:[8.00,4.50,1.40],  L6:[2.20,3.20,3.40],
+};
+
+// Cruces de 32avos según tabla FIFA Mundial 2026
+// Formato: [matchId, slotLocal, slotVisitante]
+//   - 'A1' = 1º grupo A, 'A2' = 2º grupo A
+//   - 'T_ABCDF' = mejor 3º de los grupos A,B,C,D,F (asignado por tabla FIFA)
+const R32_SLOTS = [
+  ['R32-1', 'A2', 'B2'],
+  ['R32-2', 'C1', 'F2'],
+  ['R32-3', 'E1', 'T_ABCDF'],
+  ['R32-4', 'F1', 'C2'],
+  ['R32-5', 'E2', 'I2'],
+  ['R32-6', 'I1', 'T_CDFGH'],
+  ['R32-7', 'A1', 'T_CEFHI'],
+  ['R32-8', 'L1', 'T_EHIJK'],
+  ['R32-9', 'G1', 'T_AEHIJ'],
+  ['R32-10','D1', 'T_BEFIJ'],
+  ['R32-11','H1', 'J2'],
+  ['R32-12','K2', 'L2'],
+  ['R32-13','B1', 'T_EFGIJ'],
+  ['R32-14','D2', 'G2'],
+  ['R32-15','J1', 'H2'],
+  ['R32-16','K1', 'T_DEIJL'],
+];
+// Cruces de eliminatorias siguientes (ganador de R32-X)
+const R16_SLOTS = [
+  ['R16-1', 1, 2],   ['R16-2', 3, 4],   ['R16-3', 5, 6],   ['R16-4', 7, 8],
+  ['R16-5', 9, 10],  ['R16-6', 11, 12], ['R16-7', 13, 14], ['R16-8', 15, 16],
+];
+const QF_SLOTS = [
+  ['QF-1', 1, 2], ['QF-2', 3, 4], ['QF-3', 5, 6], ['QF-4', 7, 8],
+];
+const SF_SLOTS = [['SF-1', 1, 2], ['SF-2', 3, 4]];
+const FINAL_SLOTS = [['F3', 1, 2, 'tercer'], ['F1', 1, 2, 'final']]; // 3er puesto y final
+
+// ═══════════════════════════════════════════════════════════════
+// SUPABASE INIT
+// ═══════════════════════════════════════════════════════════════
+let supa = null;
+let SUPA_ON = false;
+if (SUPABASE_URL && SUPABASE_ANON) {
+  try { supa = supabase.createClient(SUPABASE_URL, SUPABASE_ANON); SUPA_ON = true; }
+  catch(e) { console.warn('Supabase init falló:', e); }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// ESTADO GLOBAL
+// ═══════════════════════════════════════════════════════════════
+const State = {
+  user: null,           // {id, nombre}
+  isAdmin: false,
+  tab: 'predicciones',
+  faseTab: 'grupos',    // dentro de predicciones
+  cuotas: {...CUOTAS_INICIALES}, // se sobreescribe con DB si hay
+  cuotasModificadas: false,
+  predicciones: {},     // { match_id: { gl, gv, cuota, mult, tend } }
+  resultados: {},       // { match_id: { gl, gv } }
+  allUsers: [],         // para leaderboard
+  allPredicciones: {},  // { user_id: { match_id: {...} } }
+};
+
+// ═══════════════════════════════════════════════════════════════
+// HELPERS
+// ═══════════════════════════════════════════════════════════════
+async function hashPin(pin) {
+  const buf = new TextEncoder().encode(pin + ':porra2026');
+  const h = await crypto.subtle.digest('SHA-256', buf);
+  return Array.from(new Uint8Array(h)).map(b=>b.toString(16).padStart(2,'0')).join('');
+}
+function tendencia(gl, gv) { return gl > gv ? '1' : gl < gv ? '2' : 'X'; }
+function $(sel, root=document) { return root.querySelector(sel); }
+function $$(sel, root=document) { return Array.from(root.querySelectorAll(sel)); }
+function el(html) { const t = document.createElement('template'); t.innerHTML = html.trim(); return t.content.firstChild; }
+
+function toast(msg, type='ok') {
+  const colors = { ok:'#00ff88', err:'#ff5470', warn:'#ffb547' };
+  const t = el(`<div style="position:fixed;top:20px;left:50%;transform:translateX(-50%);background:${colors[type]};color:#001a0e;padding:10px 18px;border-radius:10px;font-weight:700;z-index:1000;box-shadow:0 4px 20px rgba(0,0,0,0.3)">${msg}</div>`);
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(), 2200);
+}
+
+// ═══════════════════════════════════════════════════════════════
+// LOCALSTORAGE BACKUP
+// ═══════════════════════════════════════════════════════════════
+const LS = {
+  saveUser(u){ localStorage.setItem('porra_user', JSON.stringify(u)); },
+  loadUser(){ try { return JSON.parse(localStorage.getItem('porra_user')); } catch{ return null; } },
+  clearUser(){ localStorage.removeItem('porra_user'); localStorage.removeItem('porra_admin'); },
+  saveAdmin(b){ localStorage.setItem('porra_admin', b ? '1':'0'); },
+  loadAdmin(){ return localStorage.getItem('porra_admin') === '1'; },
+  savePred(uid, preds){ localStorage.setItem('porra_pred_'+uid, JSON.stringify(preds)); },
+  loadPred(uid){ try { return JSON.parse(localStorage.getItem('porra_pred_'+uid)) || {}; } catch{ return {}; } },
+  saveCuotas(c){ localStorage.setItem('porra_cuotas', JSON.stringify(c)); },
+  loadCuotas(){ try { return JSON.parse(localStorage.getItem('porra_cuotas')); } catch{ return null; } },
+  saveResults(r){ localStorage.setItem('porra_results', JSON.stringify(r)); },
+  loadResults(){ try { return JSON.parse(localStorage.getItem('porra_results')) || {}; } catch{ return {}; } },
+};
+
+// ═══════════════════════════════════════════════════════════════
+// AUTH
+// ═══════════════════════════════════════════════════════════════
+async function login(nombre, pin) {
+  nombre = nombre.trim();
+  if (!nombre || pin.length !== 4) throw new Error('Datos inválidos');
+  const ph = await hashPin(pin);
+
+  if (!SUPA_ON) {
+    // Modo offline: localStorage only
+    const localUid = 'local_' + nombre.toLowerCase();
+    return { id: localUid, nombre };
+  }
+
+  // Buscar usuario (case-insensitive para evitar Alex vs alex como cuentas distintas)
+  let { data: matches } = await supa.from('usuarios').select('*').ilike('nombre', nombre);
+  const existing = matches && matches.length ? matches[0] : null;
+  if (existing) {
+    if (existing.pin_hash !== ph) throw new Error('PIN incorrecto');
+    return { id: existing.id, nombre: existing.nombre };
+  }
+  // Crear nuevo
+  const { data: created, error } = await supa.from('usuarios').insert({ nombre, pin_hash: ph }).select().single();
+  if (error) {
+    if (error.code === '23505') throw new Error('Ese nombre ya está en uso');
+    throw new Error('No se pudo crear: ' + error.message);
+  }
+  return { id: created.id, nombre: created.nombre };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CARGA DE DATOS (cuotas, resultados, predicciones del user)
+// ═══════════════════════════════════════════════════════════════
+async function cargarCuotas() {
+  // 1) DB → 2) localStorage → 3) iniciales
+  if (SUPA_ON) {
+    const { data } = await supa.from('cuotas').select('*');
+    if (data && data.length) {
+      data.forEach(c => State.cuotas[c.match_id] = [c.cuota_1, c.cuota_x, c.cuota_2]);
+      State.cuotasModificadas = data.some(c => c.fuente && c.fuente !== 'estimacion');
+      LS.saveCuotas(State.cuotas);
+      return;
+    }
+  }
+  const ls = LS.loadCuotas();
+  if (ls) State.cuotas = ls;
+}
+
+async function cargarResultados() {
+  if (SUPA_ON) {
+    const { data } = await supa.from('resultados').select('*');
+    if (data) {
+      State.resultados = {};
+      data.forEach(r => State.resultados[r.match_id] = { gl: r.gol_local, gv: r.gol_visitante });
+      LS.saveResults(State.resultados);
+      return;
+    }
+  }
+  State.resultados = LS.loadResults();
+}
+
+async function cargarPredicciones(uid) {
+  if (SUPA_ON && !uid.startsWith('local_')) {
+    const { data } = await supa.from('predicciones').select('*').eq('user_id', uid);
+    if (data) {
+      State.predicciones = {};
+      data.forEach(p => State.predicciones[p.match_id] = {
+        gl: p.gol_local, gv: p.gol_visitante,
+        cuota: parseFloat(p.cuota_apostada), mult: parseFloat(p.multiplicador), tend: p.tendencia,
+        fase: p.fase
+      });
+      LS.savePred(uid, State.predicciones);
+      return;
+    }
+  }
+  State.predicciones = LS.loadPred(uid);
+}
+
+async function cargarTodasPredicciones() {
+  if (!SUPA_ON) { State.allUsers = []; State.allPredicciones = {}; return; }
+  const { data: users } = await supa.from('usuarios').select('id, nombre');
+  State.allUsers = users || [];
+  const { data: preds } = await supa.from('predicciones').select('*');
+  State.allPredicciones = {};
+  (preds||[]).forEach(p => {
+    if (!State.allPredicciones[p.user_id]) State.allPredicciones[p.user_id] = {};
+    State.allPredicciones[p.user_id][p.match_id] = {
+      gl: p.gol_local, gv: p.gol_visitante,
+      cuota: parseFloat(p.cuota_apostada), mult: parseFloat(p.multiplicador), tend: p.tendencia,
+      fase: p.fase
+    };
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// GUARDAR PREDICCIONES
+// ═══════════════════════════════════════════════════════════════
+async function guardarPrediccion(match_id, gl, gv, fase, cuotasArr) {
+  const tend = tendencia(gl, gv);
+  let cuota = null, mult = null;
+  if (fase === 'grupos' && cuotasArr) {
+    cuota = tend === '1' ? cuotasArr[0] : tend === 'X' ? cuotasArr[1] : cuotasArr[2];
+    mult = multiplicadorPorCuota(cuota);
+  }
+  State.predicciones[match_id] = { gl, gv, cuota, mult, tend, fase };
+  LS.savePred(State.user.id, State.predicciones);
+
+  if (SUPA_ON && !State.user.id.startsWith('local_')) {
+    const { error } = await supa.from('predicciones').upsert({
+      user_id: State.user.id, match_id, gol_local: gl, gol_visitante: gv,
+      tendencia: tend, cuota_apostada: cuota, multiplicador: mult, fase,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'user_id,match_id' });
+    if (error) throw error;
+  }
+}
+
+async function guardarTodasPendientes() {
+  // Guarda todas las predicciones del state en bloque (botón flotante)
+  if (!SUPA_ON || State.user.id.startsWith('local_')) {
+    LS.savePred(State.user.id, State.predicciones);
+    return { ok: Object.keys(State.predicciones).length, err: 0 };
+  }
+  const rows = Object.entries(State.predicciones).map(([mid, p]) => ({
+    user_id: State.user.id, match_id: mid,
+    gol_local: p.gl, gol_visitante: p.gv, tendencia: p.tend,
+    cuota_apostada: p.cuota, multiplicador: p.mult, fase: p.fase,
+    updated_at: new Date().toISOString()
+  }));
+  if (!rows.length) return { ok:0, err:0 };
+  const { error } = await supa.from('predicciones').upsert(rows, { onConflict: 'user_id,match_id' });
+  if (error) return { ok: 0, err: rows.length };
+  return { ok: rows.length, err: 0 };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MOTOR DE SIMULACIÓN: Standings, terceros, bracket
+// ═══════════════════════════════════════════════════════════════
+main.innerHTML = `
+    ${!hayResultados ? `
+      <div class="card p-4 mb-4 text-sm" style="background:rgba(0,255,136,0.06); border-color:rgba(0,255,136,0.2)">
+        <div class="font-bold mb-1" style="color:var(--grass)">⏳ Esperando el inicio del Mundial</div>
+        <div style="color:var(--text-dim)">La clasificación se irá actualizando según se metan resultados oficiales. ${filas.length} jugador${filas.length>1?'es':''} ya tiene${filas.length>1?'n':''} predicciones cargadas.</div>
+      </div>` : ''}
+    <div class="card overflow-hidden border" style="border-color: var(--border)">
+      <div class="px-4 py-4 flex items-center justify-between" style="background: var(--bg-card-2); border-bottom:1px solid var(--border)">
+        <div class="font-bold text-sm tracking-wide text-white">🏆 CLASIFICACIÓN GENERAL</div>
+        <div class="text-[11px] font-bold pill pill-x1">${filas.length} PARTICIPANTES</div>
+      </div>
+      ${filas.map((f, i) => {
+        const isMe = f.id === State.user.id;
+        const isMaster = f.id === masterId && f.underdog > 0;
+        const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':`<span class="text-sm font-bold" style="color:var(--text-dim)">${i+1}º</span>`;
+        return `
+        <details class="border-t" style="border-color:var(--border)" ${isMe?'open':''}>
+          <summary class="flex items-center px-4 py-3 select-none cursor-pointer" style="${isMe?'background:rgba(0,255,136,0.06)':''}">
+            <div class="w-8 text-center text-lg font-black">${medal}</div>
+            <div class="flex-1 min-w-0 ml-2">
+              <div class="font-bold text-sm flex items-center gap-2 flex-wrap text-white">
+                ${f.nombre} ${isMe?'<span class="pill pill-x12">TÚ</span>':''}
+                ${isMaster?'<span class="pill badge-master">👑 Underdog Master</span>':''}
+              </div>
+              <div class="text-[11px]" style="color:var(--text-dim)">${f.aciertosT} tot. · ${f.aciertosE} maro. exacto</div>
+            </div>
+            <div class="text-right">
+              <div class="font-black text-xl" style="color:${i===0?'var(--gold)':'var(--grass)'}">${f.total}</div>
+              <div class="text-[9px] uppercase tracking-wider font-bold" style="color:var(--text-dim)">Puntos</div>
+            </div>
+          </summary>
+          <div class="px-4 pb-3 grid grid-cols-4 gap-2 text-xs" style="background: rgba(0,0,0,0.2)">
+            <div class="card-2 p-2 text-center" style="background: var(--bg-deep)">
+              <div class="font-bold text-white">${f.porFase.grupos.toFixed(1)}</div>
+              <div style="color:var(--text-dim)">Grupos</div>
+            </div>
+            <div class="card-2 p-2 text-center" style="background: var(--bg-deep)">
+              <div class="font-bold text-white">${f.supervivencia.toFixed(1)}</div>
+              <div style="color:var(--text-dim)">Superv.</div>
+            </div>
+            <div class="card-2 p-2 text-center" style="background: var(--bg-deep)">
+              <div class="font-bold text-white">${f.cruces.toFixed(1)}</div>
+              <div style="color:var(--text-dim)">Cruces</div>
+            </div>
+            <div class="card-2 p-2 text-center" style="background: var(--bg-deep)">
+              <div class="font-bold" style="color:var(--gold)">${f.underdog.toFixed(1)}</div>
+              <div style="color:var(--text-dim)">Sorpresas</div>
+            </div>
+          </div>
+        </details>`;
+      }).join('')}
+    </div>
+  `;
+  
+  function calcularStandings(predOrRes) {
+  // predOrRes: { match_id: { gl, gv } }
+  const tabla = {};
+  Object.keys(GRUPOS).forEach(g => {
+    tabla[g] = GRUPOS[g].map(eq => ({ eq, pts:0, gf:0, gc:0, dg:0, j:0, v:0, e:0, d:0 }));
+  });
+  PARTIDOS_GRUPOS.forEach(([mid, grupo, loc, vis]) => {
+    const r = predOrRes[mid];
+    if (!r) return;
+    const fila_l = tabla[grupo].find(x => x.eq === loc);
+    const fila_v = tabla[grupo].find(x => x.eq === vis);
+    fila_l.j++; fila_v.j++;
+    fila_l.gf += r.gl; fila_l.gc += r.gv;
+    fila_v.gf += r.gv; fila_v.gc += r.gl;
+    if (r.gl > r.gv)      { fila_l.pts += 3; fila_l.v++; fila_v.d++; }
+    else if (r.gl < r.gv) { fila_v.pts += 3; fila_v.v++; fila_l.d++; }
+    else                  { fila_l.pts++; fila_v.pts++; fila_l.e++; fila_v.e++; }
+  });
+  Object.keys(tabla).forEach(g => {
+    tabla[g].forEach(x => x.dg = x.gf - x.gc);
+    tabla[g].sort((a,b) => b.pts - a.pts || b.dg - a.dg || b.gf - a.gf || a.eq.localeCompare(b.eq));
+  });
+  return tabla;
+}
+
+function getEquipoFromSlot(slot, standings, tercerosAsignados) {
+  // slot tipo 'A1', 'B2', 'T_ABCDF'
+  if (slot.startsWith('T_')) {
+    return tercerosAsignados[slot] || null;
+  }
+  const grupo = slot[0];
+  const pos = parseInt(slot[1]) - 1;
+  if (!standings[grupo] || !standings[grupo][pos]) return null;
+  return standings[grupo][pos].eq;
+}
+
+function asignarTerceros(standings) {
+  // Coge los 12 terceros, ordena por (pts, dg, gf), selecciona los 8 mejores
+  const terceros = Object.keys(GRUPOS).map(g => ({
+    grupo: g,
+    fila: standings[g][2] // 3º clasificado
+  })).filter(x => x.fila && x.fila.j === 3); // solo si han jugado los 3 partidos
+  if (terceros.length < 12) return null; // no todos los grupos completos
+  terceros.sort((a,b) => b.fila.pts - a.fila.pts || b.fila.dg - a.fila.dg || b.fila.gf - a.fila.gf);
+  const top8 = terceros.slice(0, 8);
+  const gruposClasificados = top8.map(x => x.grupo).sort();
+  // Slots a asignar (cada uno acepta terceros de unos grupos concretos):
+  const slots = [
+    { id: 'T_ABCDF', acepta: ['A','B','C','D','F'] },
+    { id: 'T_CDFGH', acepta: ['C','D','F','G','H'] },
+    { id: 'T_CEFHI', acepta: ['C','E','F','H','I'] },
+    { id: 'T_EHIJK', acepta: ['E','H','I','J','K'] },
+    { id: 'T_AEHIJ', acepta: ['A','E','H','I','J'] },
+    { id: 'T_BEFIJ', acepta: ['B','E','F','I','J'] },
+    { id: 'T_EFGIJ', acepta: ['E','F','G','I','J'] },
+    { id: 'T_DEIJL', acepta: ['D','E','I','J','L'] },
+  ];
+  // Asignación greedy con backtracking simple
+  const asignacion = {};
+  const usados = new Set();
+  function asignar(idx) {
+    if (idx === slots.length) return true;
+    const slot = slots[idx];
+    const candidatos = top8.filter(t => !usados.has(t.grupo) && slot.acepta.includes(t.grupo));
+    for (const c of candidatos) {
+      asignacion[slot.id] = c.fila.eq;
+      usados.add(c.grupo);
+      if (asignar(idx+1)) return true;
+      delete asignacion[slot.id];
+      usados.delete(c.grupo);
+    }
+    return false;
+  }
+  if (!asignar(0)) return null; // no se pudo asignar (raro)
+  return asignacion;
+}
+
+function buildBracket(predicciones) {
+  // Construye el bracket entero a partir de las predicciones del usuario
+  // Retorna: { grupos: {tabla}, r32: [...], r16: [...], qf: [...], sf: [...], tercer, final, tercerosAsig }
+  const stand = calcularStandings(predicciones);
+  const tercerosAsig = asignarTerceros(stand);
+
+  const result = { grupos: stand, tercerosAsig, r32: [], r16: [], qf: [], sf: [], tercer: null, final: null };
+
+  // R32
+  R32_SLOTS.forEach(([mid, sL, sV]) => {
+    const local = getEquipoFromSlot(sL, stand, tercerosAsig || {});
+    const vis = getEquipoFromSlot(sV, stand, tercerosAsig || {});
+    const pred = predicciones[mid];
+    let ganador = null;
+    if (local && vis && pred) {
+      ganador = pred.gl > pred.gv ? local : pred.gl < pred.gv ? vis : null; // empate no permitido en knockout
+      if (!ganador) ganador = local; // si empate (no debería), avanza local por defecto en simulación
+    }
+    result.r32.push({ mid, local, vis, pred, ganador });
+  });
+
+  // R16
+  R16_SLOTS.forEach(([mid, i1, i2]) => {
+    const local = result.r32[i1-1]?.ganador;
+    const vis = result.r32[i2-1]?.ganador;
+    const pred = predicciones[mid];
+    let ganador = null;
+    if (local && vis && pred) ganador = pred.gl >= pred.gv ? local : vis;
+    result.r16.push({ mid, local, vis, pred, ganador });
+  });
+
+  // QF
+  QF_SLOTS.forEach(([mid, i1, i2]) => {
+    const local = result.r16[i1-1]?.ganador;
+    const vis = result.r16[i2-1]?.ganador;
+    const pred = predicciones[mid];
+    let ganador = null;
+    if (local && vis && pred) ganador = pred.gl >= pred.gv ? local : vis;
+    result.qf.push({ mid, local, vis, pred, ganador });
+  });
+
+  // SF
+  SF_SLOTS.forEach(([mid, i1, i2]) => {
+    const local = result.qf[i1-1]?.ganador;
+    const vis = result.qf[i2-1]?.ganador;
+    const pred = predicciones[mid];
+    let ganador = null, perdedor = null;
+    if (local && vis && pred) {
+      ganador = pred.gl >= pred.gv ? local : vis;
+      perdedor = ganador === local ? vis : local;
+    }
+    result.sf.push({ mid, local, vis, pred, ganador, perdedor });
+  });
+
+  // 3er puesto y Final
+  const f3 = predicciones['F3'];
+  const fF = predicciones['F1'];
+  result.tercer = {
+    mid: 'F3',
+    local: result.sf[0]?.perdedor, vis: result.sf[1]?.perdedor,
+    pred: f3
+  };
+  result.final = {
+    mid: 'F1',
+    local: result.sf[0]?.ganador, vis: result.sf[1]?.ganador,
+    pred: fF
+  };
+
+  return result;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// MOTOR DE PUNTUACIÓN
+// ═══════════════════════════════════════════════════════════════
+// Puntos de supervivencia: equipos que llegan a cada ronda
+const PTS_SUPERVIVENCIA = { r32: 0, r16: 2, qf: 3, sf: 5, final: 8, campeon: 12 };
+const PTS_CRUCE_TENDENCIA = 2;   // Pts si tu cruce coincide y aciertas ganador
+const PTS_CRUCE_EXACTO = 3;      // Extra si además aciertas marcador
+const ORDEN_RONDAS = ['r32','r16','qf','sf','final','campeon'];
+
+function rondaMaxAlcanzada(b, eq) {
+  if (!b.r32.some(p => p.local === eq || p.vis === eq)) return null;
+  if (!b.r16.some(p => p.local === eq || p.vis === eq)) return 'r32';
+  if (!b.qf.some(p => p.local === eq || p.vis === eq)) return 'r16';
+  if (!b.sf.some(p => p.local === eq || p.vis === eq)) return 'qf';
+  const enFinal = b.final && (b.final.local === eq || b.final.vis === eq);
+  const enTercer = b.tercer && (b.tercer.local === eq || b.tercer.vis === eq);
+  if (!enFinal && !enTercer) return 'sf';
+  if (enFinal && b.final.pred) {
+    const ganador = b.final.pred.gl >= b.final.pred.gv ? b.final.local : b.final.vis;
+    return ganador === eq ? 'campeon' : 'final';
+  }
+  return enFinal ? 'final' : 'sf';
+}
+
+function buscarPartidoEnBracket(b, mid) {
+  return b.r32.find(x=>x.mid===mid) || b.r16.find(x=>x.mid===mid) ||
+         b.qf.find(x=>x.mid===mid)  || b.sf.find(x=>x.mid===mid)  ||
+         (mid==='F3' ? b.tercer : mid==='F1' ? b.final : null);
+}
+
+function puntuarUsuario(predicciones) {
+  let total = 0, underdog = 0, aciertosT = 0, aciertosE = 0;
+  let porFase = { grupos:0, ko:0 };
+  let supervivencia = 0, cruces = 0;
+
+  const bracketUser = buildBracket(predicciones);
+  const bracketOf = buildBracket(
+    Object.fromEntries(Object.entries(State.resultados).map(
+      ([k,v]) => [k, {gl: v.gl, gv: v.gv, fase: 'auto', tend: tendencia(v.gl, v.gv)}]
+    ))
+  );
+
+  // ──── GRUPOS ────
+  Object.entries(predicciones).forEach(([mid, p]) => {
+    if (p.fase !== 'grupos') return;
+    const real = State.resultados[mid];
+    if (!real) return;
+    const tendReal = tendencia(real.gl, real.gv);
+    let puntos = 0;
+    if (p.tend === tendReal) {
+      aciertosT++;
+      if (p.mult) {
+        puntos = PUNTOS_BASE * p.mult;
+        if (p.mult >= UNDERDOG_THRESHOLD) underdog += puntos;
+      } else { puntos = PUNTOS_BASE; }
+      if (p.gl === real.gl && p.gv === real.gv) {
+        puntos += BONUS_EXACTO; aciertosE++;
+      }
+    }
+    total += puntos; porFase.grupos += puntos;
+  });
+
+  // ──── SUPERVIVENCIA POR EQUIPO ────
+  // Por cada equipo: hasta qué ronda llegó en mi bracket y en el oficial.
+  // Premio por la ronda MÍNIMA común (es decir, hasta donde ambos coinciden que llegó).
+  Object.keys(EQUIPOS).forEach(eq => {
+    const um = rondaMaxAlcanzada(bracketUser, eq);
+    const om = rondaMaxAlcanzada(bracketOf, eq);
+    if (!um || !om) return;
+    const minIdx = Math.min(ORDEN_RONDAS.indexOf(um), ORDEN_RONDAS.indexOf(om));
+    for (let i = 1; i <= minIdx; i++) {
+      supervivencia += PTS_SUPERVIVENCIA[ORDEN_RONDAS[i]];
+    }
+  });
+
+  // ──── CRUCES KO (extra si los dos equipos coinciden) ────
+  Object.entries(predicciones).forEach(([mid, p]) => {
+    if (p.fase === 'grupos') return;
+    const real = State.resultados[mid];
+    if (!real) return;
+    const eUser = buscarPartidoEnBracket(bracketUser, mid);
+    const eOf = buscarPartidoEnBracket(bracketOf, mid);
+    if (!eUser?.local || !eUser?.vis || !eOf?.local || !eOf?.vis) return;
+    const set1 = new Set([eUser.local, eUser.vis]);
+    const set2 = new Set([eOf.local, eOf.vis]);
+    if (set1.size !== 2 || set2.size !== 2) return;
+    let coinciden = true;
+    set1.forEach(e => { if (!set2.has(e)) coinciden = false; });
+    if (!coinciden) return;
+    // Cruces coinciden → comparar resultado (invirtiendo si el orden local/vis es distinto)
+    let predGL = p.gl, predGV = p.gv;
+    if (eUser.local !== eOf.local) { predGL = p.gv; predGV = p.gl; }
+    const tendReal = tendencia(real.gl, real.gv);
+    const tendPred = tendencia(predGL, predGV);
+    let pts = 0;
+    if (tendPred === tendReal) {
+      aciertosT++;
+      pts = PTS_CRUCE_TENDENCIA;
+      if (predGL === real.gl && predGV === real.gv) {
+        pts += PTS_CRUCE_EXACTO; aciertosE++;
+      }
+    }
+    cruces += pts;
+  });
+
+  total += supervivencia + cruces;
+  porFase.ko = supervivencia + cruces;
+
+  return {
+    total: Math.round(total * 10) / 10,
+    underdog: Math.round(underdog * 10) / 10,
+    aciertosT, aciertosE, porFase,
+    supervivencia: Math.round(supervivencia*10)/10,
+    cruces: Math.round(cruces*10)/10,
+  };
+}
+
+function calcularLeaderboard() {
+  const filas = State.allUsers.map(u => {
+    const preds = State.allPredicciones[u.id] || {};
+    const score = puntuarUsuario(preds);
+    return { ...u, ...score };
+  });
+  filas.sort((a,b) => b.total - a.total || b.aciertosE - a.aciertosE);
+  // Underdog master: el de mayor puntuación underdog (si >0)
+  let masterId = null, max = 0;
+  filas.forEach(f => { if (f.underdog > max) { max = f.underdog; masterId = f.id; } });
+  return { filas, masterId };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RENDER: LOGIN
+// ═══════════════════════════════════════════════════════════════
+function renderLogin() {
+  $('#app').innerHTML = `
+    <div class="min-h-screen flex flex-col justify-center px-6 py-12">
+      <div class="text-center mb-8">
+        <div class="text-6xl mb-2">⚽</div>
+        <h1 class="text-3xl font-black tracking-tight" style="color:var(--grass)">PORRA MUNDIAL</h1>
+        <div class="text-sm font-semibold mt-1" style="color:var(--gold)">2026 · FOOTBALL KNOWLEDGE</div>
+      </div>
+      <div class="card p-6 max-w-sm mx-auto w-full glow-grass">
+        <label class="block text-xs font-bold uppercase tracking-wide mb-2" style="color:var(--text-dim)">Nombre</label>
+        <input id="login-name" type="text" maxlength="20" autocomplete="off"
+               class="w-full bg-transparent border rounded-lg px-3 py-3 text-base mb-5 focus:outline-none"
+               style="border-color:var(--border)" placeholder="Ej: Alex">
+        <label class="block text-xs font-bold uppercase tracking-wide mb-2" style="color:var(--text-dim)">PIN (4 dígitos)</label>
+        <div class="flex justify-center mb-2" id="pin-dots">
+          <div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div><div class="pin-dot"></div>
+        </div>
+        <input id="login-pin" type="tel" inputmode="numeric" maxlength="4" autocomplete="off"
+               class="w-full bg-transparent border rounded-lg px-3 py-3 text-center text-2xl tracking-[1em] mb-5 focus:outline-none"
+               style="border-color:var(--border); padding-left: 1em" placeholder="••••">
+        <button id="btn-login" class="btn btn-primary w-full">Entrar</button>
+        <p class="text-xs mt-4 text-center" style="color:var(--text-dim)">
+          ${SUPA_ON ? 'Si tu nombre es nuevo, se creará la cuenta automáticamente.' : '⚠ Modo offline (sin Supabase). Solo tu navegador.'}
+        </p>
+      </div>
+      <div class="text-center mt-6 text-xs" style="color:var(--text-dim)">
+        v1.0 · Premia el <span style="color:var(--gold)">conocimiento futbolístico</span>
+      </div>
+    </div>
+  `;
+  const pinInput = $('#login-pin');
+  pinInput.addEventListener('input', e => {
+    const dots = $$('#pin-dots .pin-dot');
+    dots.forEach((d,i) => d.classList.toggle('filled', i < e.target.value.length));
+  });
+  $('#btn-login').addEventListener('click', async () => {
+    const nombre = $('#login-name').value;
+    const pin = pinInput.value;
+    if (!nombre.trim()) return toast('Mete un nombre', 'err');
+    if (pin.length !== 4) return toast('PIN de 4 dígitos', 'err');
+    const btn = $('#btn-login'); btn.disabled = true; btn.textContent = 'Entrando...';
+    try {
+      const user = await login(nombre, pin);
+      State.user = user;
+      State.isAdmin = (pin === ADMIN_PIN); // truco: si tu PIN coincide con ADMIN_PIN, eres admin
+      LS.saveUser(user);
+      LS.saveAdmin(State.isAdmin);
+      await initApp();
+    } catch(e) {
+      toast(e.message, 'err');
+      btn.disabled = false; btn.textContent = 'Entrar';
+    }
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RENDER: APP SHELL
+// ═══════════════════════════════════════════════════════════════
+function renderShell() {
+  const adminBadge = State.isAdmin ? `<span class="pill pill-x14 ml-2">ADMIN</span>` : '';
+  const banner = !State.cuotasModificadas ? `
+    <div class="mx-3 mt-2 p-3 rounded-lg text-xs flex items-start gap-2" style="background:rgba(255,181,71,0.1); border:1px solid rgba(255,181,71,0.3); color:var(--warn)">
+      <span class="text-base leading-none">⚠</span>
+      <div><b>Cuotas provisionales</b>. Son estimaciones iniciales. ${State.isAdmin ? 'Actualízalas desde el panel <b>Admin</b> con las reales de Winamax.' : 'El admin las actualizará pronto.'}</div>
+    </div>` : '';
+
+  $('#app').innerHTML = `
+    <header class="sticky top-0 z-40 backdrop-blur" style="background:rgba(10,15,13,0.92); border-bottom:1px solid var(--border)">
+      <div class="flex items-center justify-between px-4 py-3">
+        <div class="flex items-center gap-2">
+          <span class="text-2xl">⚽</span>
+          <div>
+            <div class="font-black text-sm leading-tight" style="color:var(--grass)">PORRA MUNDIAL</div>
+            <div class="text-[10px] font-bold" style="color:var(--gold)">2026 · ${State.user.nombre.toUpperCase()}${State.isAdmin ? ' · ADMIN':''}</div>
+          </div>
+        </div>
+        <div class="flex gap-2">
+          ${State.isAdmin ? `<button id="btn-admin" class="btn btn-ghost text-xs" style="padding:6px 12px">Admin</button>`:''}
+          <button id="btn-logout" class="btn btn-ghost text-xs" style="padding:6px 12px">Salir</button>
+        </div>
+      </div>
+      ${banner}
+      <nav class="flex border-t" style="border-color:var(--border)">
+        <button class="tab-btn ${State.tab==='predicciones'?'active':''}" data-tab="predicciones">⚽ Predicciones</button>
+        <button class="tab-btn ${State.tab==='leaderboard'?'active':''}" data-tab="leaderboard">🏆 Clasificación</button>
+        <button class="tab-btn ${State.tab==='resumen'?'active':''}" data-tab="resumen">📊 Mi Bracket</button>
+      </nav>
+    </header>
+    <main id="main" class="px-3 py-4"></main>
+  `;
+  $$('.tab-btn').forEach(b => b.addEventListener('click', () => {
+    State.tab = b.dataset.tab; renderShell(); renderMain();
+  }));
+  $('#btn-logout').addEventListener('click', () => {
+    LS.clearUser(); State.user = null; State.isAdmin = false; renderLogin();
+  });
+  if (State.isAdmin) $('#btn-admin').addEventListener('click', renderAdmin);
+  renderMain();
+}
+
+function renderMain() {
+  if (State.tab === 'predicciones') renderPredicciones();
+  else if (State.tab === 'leaderboard') renderLeaderboard();
+  else renderResumen();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RENDER: PREDICCIONES
+// ═══════════════════════════════════════════════════════════════
+function renderPredicciones() {
+  const main = $('#main');
+  const fases = ['grupos','r32','r16','qf','sf','final'];
+  const fasesLabel = { grupos:'Grupos', r32:'32avos', r16:'8vos', qf:'Cuartos', sf:'Semis', final:'Final' };
+
+  main.innerHTML = `
+    <div class="scroll-x mb-4">
+      <div class="flex gap-2 pb-2">
+        ${fases.map(f => `<button class="px-4 py-2 rounded-full text-xs font-bold whitespace-nowrap fase-tab ${State.faseTab===f?'btn-primary':'card-2'}" data-fase="${f}" style="${State.faseTab===f?'':'color:var(--text-dim)'}">${fasesLabel[f]}</button>`).join('')}
+      </div>
+    </div>
+    <div id="partidos-container"></div>
+    <button id="btn-save" class="float-save btn btn-primary flex items-center gap-2 shadow-2xl">
+      ☁ Guardar nube
+    </button>
+  `;
+  $$('.fase-tab').forEach(b => b.addEventListener('click', () => {
+    State.faseTab = b.dataset.fase; renderPredicciones();
+  }));
+  $('#btn-save').addEventListener('click', async () => {
+    const btn = $('#btn-save'); btn.disabled = true; btn.innerHTML = 'Guardando...';
+    const res = await guardarTodasPendientes();
+    if (res.err === 0) {
+      btn.classList.add('save-ok'); btn.innerHTML = '✓ Guardado';
+      toast(`${res.ok} predicciones en la nube`, 'ok');
+    } else {
+      btn.innerHTML = '⚠ Error al guardar';
+      toast('Error al subir', 'err');
+    }
+    setTimeout(()=>{ btn.disabled = false; btn.innerHTML = '☁ Guardar nube'; btn.classList.remove('save-ok'); }, 1800);
+  });
+
+  if (State.faseTab === 'grupos') renderPartidosGrupos();
+  else renderPartidosKO(State.faseTab);
+}
+
+function renderPartidosGrupos() {
+  const cont = $('#partidos-container');
+  const jornadas = [1,2,3];
+  cont.innerHTML = jornadas.map(j => {
+    const partidos = PARTIDOS_GRUPOS.filter(p => p[5] === j);
+    return `
+      <section class="mb-6">
+        <h2 class="text-xs font-bold uppercase tracking-wider mb-3 px-1" style="color:var(--text-dim)">Jornada ${j}</h2>
+        <div class="space-y-2">
+          ${partidos.map(p => cardPartidoGrupo(p)).join('')}
+        </div>
+      </section>
+    `;
+  }).join('');
+  enlazarInputsPartido();
+}
+
+function cardPartidoGrupo(p) {
+  const [mid, grupo, loc, vis, fecha] = p;
+  const eqL = EQUIPOS[loc], eqV = EQUIPOS[vis];
+  const cuotas = State.cuotas[mid] || [2,3,3];
+  const pred = State.predicciones[mid] || {};
+  const tend = (pred.gl != null && pred.gv != null) ? tendencia(pred.gl, pred.gv) : null;
+  const cuotaApostada = tend ? (tend==='1'?cuotas[0]:tend==='X'?cuotas[1]:cuotas[2]) : null;
+  const mult = cuotaApostada ? multiplicadorPorCuota(cuotaApostada) : null;
+  const multPill = mult ? `<span class="pill ${pillClassMult(mult)}">×${mult.toFixed(1)}</span>` : `<span class="pill pill-x1" style="opacity:0.4">—</span>`;
+  const puntosMax = mult ? (PUNTOS_BASE * mult + BONUS_EXACTO).toFixed(1) : '—';
+
+  return `
+    <div class="card p-3" data-mid="${mid}">
+      <div class="flex items-center justify-between text-[10px] mb-2" style="color:var(--text-dim)">
+        <span class="font-bold">Grupo ${grupo} · ${fecha}</span>
+        <span class="flex items-center gap-2">${multPill}<span>máx ${puntosMax}pt</span></span>
+      </div>
+      <div class="flex items-center gap-2">
+        <div class="flex-1 flex items-center gap-2 min-w-0">
+          <span class="flag">${eqL.flag}</span>
+          <div class="min-w-0">
+            <div class="font-bold text-sm truncate">${eqL.name}</div>
+            <div class="text-[10px]" style="color:var(--text-dim)">#${eqL.rank} · @${cuotas[0]}</div>
+          </div>
+        </div>
+        <input class="input-score score-l ${pred.gl!=null?'filled':''}" type="tel" inputmode="numeric" maxlength="2" value="${pred.gl!=null?pred.gl:''}" data-mid="${mid}" data-side="l">
+        <span style="color:var(--text-dim)">-</span>
+        <input class="input-score score-v ${pred.gv!=null?'filled':''}" type="tel" inputmode="numeric" maxlength="2" value="${pred.gv!=null?pred.gv:''}" data-mid="${mid}" data-side="v">
+        <div class="flex-1 flex items-center gap-2 min-w-0 justify-end text-right">
+          <div class="min-w-0">
+            <div class="font-bold text-sm truncate">${eqV.name}</div>
+            <div class="text-[10px]" style="color:var(--text-dim)">#${eqV.rank} · @${cuotas[2]}</div>
+          </div>
+          <span class="flag">${eqV.flag}</span>
+        </div>
+      </div>
+      <div class="flex justify-center gap-3 mt-2 text-[10px]" style="color:var(--text-dim)">
+        <span>1 @${cuotas[0]}</span><span>X @${cuotas[1]}</span><span>2 @${cuotas[2]}</span>
+      </div>
+    </div>
+  `;
+}
+
+function renderPartidosKO(fase) {
+  const cont = $('#partidos-container');
+
+  // ──── VALIDACIÓN: solo permitir entrar en una fase KO si la anterior está completa ────
+  const requisitos = {
+    r32:   { tipo:'grupos', total: PARTIDOS_GRUPOS.length, label:'fase de grupos' },
+    r16:   { tipo:'r32', total: R32_SLOTS.length, label:'32avos' },
+    qf:    { tipo:'r16', total: R16_SLOTS.length, label:'octavos' },
+    sf:    { tipo:'qf',  total: QF_SLOTS.length,  label:'cuartos' },
+    final: { tipo:'sf',  total: SF_SLOTS.length,  label:'semifinales' },
+  };
+  const req = requisitos[fase];
+  let predichosFasePrev = 0;
+  if (req) {
+    if (req.tipo === 'grupos') {
+      predichosFasePrev = PARTIDOS_GRUPOS.filter(p => State.predicciones[p[0]]).length;
+    } else {
+      const slotMap = { r32: R32_SLOTS, r16: R16_SLOTS, qf: QF_SLOTS, sf: SF_SLOTS };
+      predichosFasePrev = slotMap[req.tipo].filter(s => State.predicciones[s[0]]).length;
+    }
+  }
+  if (req && predichosFasePrev < req.total) {
+    cont.innerHTML = `
+      <div class="card p-8 text-center">
+        <div class="text-5xl mb-3">🔒</div>
+        <div class="font-bold text-base mb-2">Bloqueado</div>
+        <div class="text-sm mb-4" style="color:var(--text-dim)">
+          Termina las predicciones de <b style="color:var(--grass)">${req.label}</b> primero.<br>
+          Llevas <b>${predichosFasePrev}/${req.total}</b> partidos.
+        </div>
+        <div class="w-full h-2 rounded-full mx-auto" style="background:var(--bg-card-2); max-width:240px">
+          <div class="h-full rounded-full" style="background:var(--grass); width:${(predichosFasePrev/req.total*100).toFixed(0)}%"></div>
+        </div>
+        <div class="text-[10px] mt-4" style="color:var(--text-dim)">
+          Los cruces de cada ronda se calculan a partir de tus predicciones de la ronda anterior.
+        </div>
+      </div>
+    `;
+    return;
+  }
+
+  // ──── A partir de aquí, la fase anterior está completa: pintar el bracket ────
+  const bracket = buildBracket(State.predicciones);
+  const sectionsMap = {
+    r32:   { titulo:'32avos de final', items: bracket.r32 },
+    r16:   { titulo:'Octavos de final', items: bracket.r16 },
+    qf:    { titulo:'Cuartos de final', items: bracket.qf },
+    sf:    { titulo:'Semifinales', items: bracket.sf },
+    final: { titulo:'Final + 3er puesto', items: [bracket.tercer, bracket.final].filter(x=>x) }
+  };
+  const sec = sectionsMap[fase];
+
+  cont.innerHTML = `
+    <h2 class="text-xs font-bold uppercase tracking-wider mb-3 px-1" style="color:var(--text-dim)">${sec.titulo}</h2>
+    <div class="card p-3 mb-3 text-xs" style="background:rgba(0,255,136,0.05); border-color:rgba(0,255,136,0.2)">
+      💡 Estos cruces son SEGÚN TUS PREDICCIONES. Si el bracket oficial acaba siendo distinto, ganarás puntos igualmente por los equipos que acertaste que llegaban a esta ronda (supervivencia).
+    </div>
+    <div class="space-y-2">${sec.items.map(it => cardPartidoKO(it, fase)).join('')}</div>
+  `;
+  enlazarInputsPartido();
+}
+
+function cardPartidoKO(it, fase) {
+  if (!it) return '';
+  const mid = it.mid;
+  const eqL = it.local ? EQUIPOS[it.local] : null;
+  const eqV = it.vis ? EQUIPOS[it.vis] : null;
+  const pred = State.predicciones[mid] || {};
+  const isFinal3 = mid === 'F3';
+  const isFinal = mid === 'F1';
+  const label = isFinal ? '🏆 GRAN FINAL' : isFinal3 ? '🥉 3er Puesto' : '';
+
+  const disabled = (!eqL || !eqV);
+  return `
+    <div class="card p-3 ${isFinal?'glow-grass':''}" data-mid="${mid}" ${isFinal?'style="border-color:var(--gold)"':''}>
+      <div class="flex items-center justify-between text-[10px] mb-2" style="color:var(--text-dim)">
+        <span class="font-bold">${mid}${label?' · '+label:''}</span>
+        <span>máx ${PTS_CRUCE_TENDENCIA + PTS_CRUCE_EXACTO}pt por cruce + supervivencia</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <div class="flex-1 flex items-center gap-2 min-w-0">
+          <span class="flag">${eqL ? eqL.flag : '⬜'}</span>
+          <div class="min-w-0">
+            <div class="font-bold text-sm truncate">${eqL ? eqL.name : '—'}</div>
+          </div>
+        </div>
+        <input class="input-score score-l ${pred.gl!=null?'filled':''}" type="tel" inputmode="numeric" maxlength="2" value="${pred.gl!=null?pred.gl:''}" data-mid="${mid}" data-side="l" ${disabled?'disabled':''}>
+        <span style="color:var(--text-dim)">-</span>
+        <input class="input-score score-v ${pred.gv!=null?'filled':''}" type="tel" inputmode="numeric" maxlength="2" value="${pred.gv!=null?pred.gv:''}" data-mid="${mid}" data-side="v" ${disabled?'disabled':''}>
+        <div class="flex-1 flex items-center gap-2 min-w-0 justify-end text-right">
+          <div class="min-w-0">
+            <div class="font-bold text-sm truncate">${eqV ? eqV.name : '—'}</div>
+          </div>
+          <span class="flag">${eqV ? eqV.flag : '⬜'}</span>
+        </div>
+      </div>
+      ${!isFinal3 ? '<div class="text-center text-[10px] mt-2" style="color:var(--text-dim)">(empates no permitidos en eliminatorias — pon el resultado tras prórroga/penaltis)</div>':''}
+    </div>
+  `;
+}
+
+function enlazarInputsPartido() {
+  $$('.input-score').forEach(inp => {
+    inp.addEventListener('input', async e => {
+      const mid = e.target.dataset.mid;
+      const side = e.target.dataset.side;
+      const val = e.target.value.replace(/\D/g,'');
+      e.target.value = val;
+      if (val === '') return;
+      const num = parseInt(val);
+      if (isNaN(num)) return;
+
+      const partidoGrupo = PARTIDOS_GRUPOS.find(p => p[0] === mid);
+      const fase = partidoGrupo ? 'grupos' : (mid.startsWith('R32')?'r32':mid.startsWith('R16')?'r16':mid.startsWith('QF')?'qf':mid.startsWith('SF')?'sf':mid==='F3'?'tercer':'final');
+
+      const actual = State.predicciones[mid] || {};
+      if (side === 'l') actual.gl = num; else actual.gv = num;
+
+      if (actual.gl != null && actual.gv != null) {
+        const cuotas = State.cuotas[mid];
+        await guardarPrediccion(mid, actual.gl, actual.gv, fase, cuotas);
+        e.target.classList.add('filled');
+        // Repintar para que multiplicador y pill se actualicen
+        if (fase === 'grupos') {
+          const card = e.target.closest('[data-mid]');
+          const p = PARTIDOS_GRUPOS.find(x => x[0] === mid);
+          if (card && p) card.outerHTML = cardPartidoGrupo(p);
+          enlazarInputsPartido();
+        }
+      } else {
+        State.predicciones[mid] = actual;
+        LS.savePred(State.user.id, State.predicciones);
+      }
+    });
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RENDER: LEADERBOARD
+// ═══════════════════════════════════════════════════════════════
+async function renderLeaderboard() {
+  const main = $('#main');
+  main.innerHTML = `<div class="card p-6 text-center skel" style="height:200px"></div>`;
+  await cargarTodasPredicciones();
+  await cargarResultados();
+  const { filas, masterId } = calcularLeaderboard();
+  const hayResultados = Object.keys(State.resultados).length > 0;
+
+  if (filas.length === 0) {
+    main.innerHTML = `
+      <div class="card p-8 text-center">
+        <div class="text-4xl mb-2">🏆</div>
+        <div class="font-bold mb-1">Aún no hay nadie en la clasificación</div>
+        <div class="text-sm" style="color:var(--text-dim)">${SUPA_ON ? 'Comparte el link con la cuadrilla' : 'Modo offline — sin clasificación compartida'}</div>
+      </div>`;
+    return;
+  }
+
+  main.innerHTML = `
+    ${!hayResultados ? `
+      <div class="card p-4 mb-4 text-sm" style="background:rgba(0,255,136,0.06); border-color:rgba(0,255,136,0.2)">
+        <div class="font-bold mb-1" style="color:var(--grass)">⏳ Esperando el inicio del Mundial</div>
+        <div style="color:var(--text-dim)">La clasificación se irá actualizando según se metan resultados oficiales. ${filas.length} jugador${filas.length>1?'es':''} ya tiene${filas.length>1?'n':''} predicciones cargadas.</div>
+      </div>` : ''}
+    <div class="card overflow-hidden">
+      <div class="px-4 py-3 flex items-center justify-between" style="border-bottom:1px solid var(--border)">
+        <div class="font-bold text-sm">Clasificación general</div>
+        <div class="text-[10px]" style="color:var(--text-dim)">${filas.length} jugadores</div>
+      </div>
+      ${filas.map((f, i) => {
+        const isMe = f.id === State.user.id;
+        const isMaster = f.id === masterId && f.underdog > 0;
+        const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':`<span class="text-sm" style="color:var(--text-dim)">${i+1}</span>`;
+        return `
+        <details class="border-t" style="border-color:var(--border)" ${isMe?'open':''}>
+          <summary class="flex items-center px-4 py-3 ${isMe?'':''}" style="${isMe?'background:rgba(0,255,136,0.04)':''}">
+            <div class="w-8 text-center text-lg font-black">${medal}</div>
+            <div class="flex-1 min-w-0 ml-2">
+              <div class="font-bold text-sm flex items-center gap-2 flex-wrap">
+                ${f.nombre} ${isMe?'<span class="pill pill-x12">tú</span>':''}
+                ${isMaster?'<span class="pill badge-master">👑 Underdog Master</span>':''}
+              </div>
+              <div class="text-[10px]" style="color:var(--text-dim)">${f.aciertosT} aciertos · ${f.aciertosE} exactos · ${f.underdog.toFixed(1)}pt en underdogs</div>
+            </div>
+            <div class="text-right">
+              <div class="font-black text-xl" style="color:${i===0?'var(--gold)':'var(--text)'}">${f.total}</div>
+              <div class="text-[10px]" style="color:var(--text-dim)">puntos</div>
+            </div>
+          </summary>
+          <div class="px-4 pb-3 grid grid-cols-4 gap-2 text-xs">
+            <div class="card-2 p-2 text-center">
+              <div class="font-bold">${f.porFase.grupos.toFixed(1)}</div>
+              <div style="color:var(--text-dim)">grupos</div>
+            </div>
+            <div class="card-2 p-2 text-center">
+              <div class="font-bold">${f.supervivencia.toFixed(1)}</div>
+              <div style="color:var(--text-dim)">supervivencia</div>
+            </div>
+            <div class="card-2 p-2 text-center">
+              <div class="font-bold">${f.cruces.toFixed(1)}</div>
+              <div style="color:var(--text-dim)">cruces KO</div>
+            </div>
+            <div class="card-2 p-2 text-center">
+              <div class="font-bold" style="color:var(--gold)">${f.underdog.toFixed(1)}</div>
+              <div style="color:var(--text-dim)">underdogs</div>
+            </div>
+          </div>
+        </details>`;
+      }).join('')}
+    </div>
+    <div class="text-[10px] mt-3 px-1" style="color:var(--text-dim)">
+      <b>Underdog Master</b>: jugador con más puntos acumulados en partidos donde apostó con multiplicador ×1.4 o ×1.6.
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RENDER: RESUMEN / MI BRACKET
+// ═══════════════════════════════════════════════════════════════
+function renderResumen() {
+  const main = $('#main');
+  const bracket = buildBracket(State.predicciones);
+  const totalPreds = Object.keys(State.predicciones).length;
+  const previstos = puntuarUsuario(State.predicciones);
+  const numCuotas = Object.values(State.predicciones).filter(p => p.fase==='grupos' && p.mult);
+  const conteoMult = { 1:0, 1.2:0, 1.4:0, 1.6:0 };
+  numCuotas.forEach(p => { if (conteoMult[p.mult] != null) conteoMult[p.mult]++; });
+
+  // Máximo teórico = lo que sacaría si todo lo que predijo se cumple oficialmente
+  let maxGrupos = 0;
+  Object.values(State.predicciones).forEach(p => {
+    if (p.fase === 'grupos' && p.mult) maxGrupos += PUNTOS_BASE * p.mult + BONUS_EXACTO;
+  });
+  let maxSupervivencia = 0;
+  Object.keys(EQUIPOS).forEach(eq => {
+    const r = rondaMaxAlcanzada(bracket, eq);
+    if (!r) return;
+    const idx = ORDEN_RONDAS.indexOf(r);
+    for (let i = 1; i <= idx; i++) maxSupervivencia += PTS_SUPERVIVENCIA[ORDEN_RONDAS[i]];
+  });
+  const koPredichos = Object.values(State.predicciones).filter(p => p.fase !== 'grupos').length;
+  const maxCruces = koPredichos * (PTS_CRUCE_TENDENCIA + PTS_CRUCE_EXACTO);
+  const puntosMaxTeoricos = maxGrupos + maxSupervivencia + maxCruces;
+
+  const finalEq = bracket.final.local && bracket.final.vis && bracket.final.pred
+    ? (bracket.final.pred.gl >= bracket.final.pred.gv ? bracket.final.local : bracket.final.vis)
+    : null;
+
+  main.innerHTML = `
+    <div class="grid grid-cols-2 gap-2 mb-4">
+      <div class="card p-3"><div class="text-[10px] uppercase font-bold" style="color:var(--text-dim)">Predicciones</div><div class="text-2xl font-black">${totalPreds}<span class="text-sm font-normal" style="color:var(--text-dim)">/${PARTIDOS_GRUPOS.length + 31}</span></div></div>
+      <div class="card p-3"><div class="text-[10px] uppercase font-bold" style="color:var(--text-dim)">Puntos máx posibles</div><div class="text-2xl font-black" style="color:var(--gold)">${puntosMaxTeoricos.toFixed(0)}</div></div>
+      <div class="card p-3"><div class="text-[10px] uppercase font-bold" style="color:var(--text-dim)">Puntos actuales</div><div class="text-2xl font-black" style="color:var(--grass)">${previstos.total}</div></div>
+      <div class="card p-3"><div class="text-[10px] uppercase font-bold" style="color:var(--text-dim)">En underdogs</div><div class="text-2xl font-black" style="color:var(--gold)">${previstos.underdog.toFixed(1)}</div></div>
+    </div>
+
+    <div class="card p-4 mb-4">
+      <h3 class="font-bold text-sm mb-3">Desglose de tu puntuación</h3>
+      <div class="grid grid-cols-3 gap-2 text-xs">
+        <div class="card-2 p-2 text-center"><div class="font-bold text-lg">${previstos.porFase.grupos.toFixed(1)}</div><div style="color:var(--text-dim)">Grupos</div><div class="text-[10px]" style="color:var(--text-dim)">máx ${maxGrupos.toFixed(0)}</div></div>
+        <div class="card-2 p-2 text-center"><div class="font-bold text-lg">${previstos.supervivencia.toFixed(1)}</div><div style="color:var(--text-dim)">Supervivencia</div><div class="text-[10px]" style="color:var(--text-dim)">máx ${maxSupervivencia.toFixed(0)}</div></div>
+        <div class="card-2 p-2 text-center"><div class="font-bold text-lg">${previstos.cruces.toFixed(1)}</div><div style="color:var(--text-dim)">Cruces KO</div><div class="text-[10px]" style="color:var(--text-dim)">máx ${maxCruces.toFixed(0)}</div></div>
+      </div>
+      <div class="text-[10px] mt-3 leading-relaxed" style="color:var(--text-dim)">
+        <b>Supervivencia</b>: por cada equipo que predijiste que llegaba lejos y de hecho llega.<br>
+        <b>Cruces KO</b>: extra cuando coincide tu cruce simulado con el oficial (+2 ganador, +3 marcador exacto).
+      </div>
+    </div>
+
+    <div class="card p-4 mb-4">
+      <h3 class="font-bold text-sm mb-3">Tu reparto de riesgo (grupos)</h3>
+      <div class="space-y-2 text-sm">
+        ${[1,1.2,1.4,1.6].map(m => {
+          const n = conteoMult[m]; const max = Math.max(...Object.values(conteoMult), 1);
+          const pct = (n/max)*100;
+          return `<div class="flex items-center gap-3">
+            <span class="pill ${pillClassMult(m)}" style="min-width:50px; justify-content:center">×${m.toFixed(1)}</span>
+            <div class="flex-1 h-3 rounded-full" style="background:var(--bg-card-2)"><div class="h-full rounded-full" style="width:${pct}%; background:${m>=1.4?'var(--gold)':'var(--grass)'}"></div></div>
+            <span class="text-xs font-bold w-10 text-right">${n}</span>
+          </div>`;
+        }).join('')}
+      </div>
+      <div class="text-[10px] mt-3" style="color:var(--text-dim)">Cuantas más apuestas en ×1.4 y ×1.6, más arriesgado tu bote.</div>
+    </div>
+
+    <div class="card p-4">
+      <h3 class="font-bold text-sm mb-3">Tu bracket simulado</h3>
+      ${finalEq ? `
+        <div class="text-center mb-4">
+          <div class="text-xs" style="color:var(--text-dim)">Tu campeón del mundo</div>
+          <div class="text-3xl font-black mt-1" style="color:var(--gold)">${EQUIPOS[finalEq].flag} ${EQUIPOS[finalEq].name}</div>
+          <div class="text-xs mt-1" style="color:var(--text-dim)">según tus predicciones</div>
+        </div>` : `<div class="text-center text-sm py-4" style="color:var(--text-dim)">Completa las predicciones de eliminatorias para ver a tu campeón</div>`}
+      ${miniBracket(bracket)}
+    </div>
+  `;
+}
+
+function miniBracket(b) {
+  function pintaPartido(item, etiq) {
+    if (!item) return '';
+    const l = item.local ? `${EQUIPOS[item.local].flag} ${EQUIPOS[item.local].name}` : '—';
+    const v = item.vis ? `${EQUIPOS[item.vis].flag} ${EQUIPOS[item.vis].name}` : '—';
+    const score = item.pred ? `${item.pred.gl}-${item.pred.gv}` : '·';
+    return `<div class="card-2 p-2 text-xs flex justify-between gap-2"><div class="truncate flex-1">${l}</div><div class="font-bold" style="color:var(--grass)">${score}</div><div class="truncate flex-1 text-right">${v}</div></div>`;
+  }
+  return `
+    <div class="space-y-3">
+      <div><div class="text-[10px] uppercase font-bold mb-1" style="color:var(--text-dim)">Semifinales</div><div class="space-y-1">${b.sf.map(s => pintaPartido(s,'SF')).join('')}</div></div>
+      <div><div class="text-[10px] uppercase font-bold mb-1" style="color:var(--text-dim)">3er puesto</div>${pintaPartido(b.tercer,'F3')}</div>
+      <div><div class="text-[10px] uppercase font-bold mb-1" style="color:var(--gold)">FINAL 🏆</div>${pintaPartido(b.final,'F1')}</div>
+    </div>
+  `;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RENDER: PANEL ADMIN
+// ═══════════════════════════════════════════════════════════════
+function renderAdmin() {
+  const modal = el(`
+    <div class="fixed inset-0 z-50 modal-bg flex items-end sm:items-center justify-center p-3">
+      <div class="card w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+        <div class="flex items-center justify-between px-4 py-3" style="border-bottom:1px solid var(--border)">
+          <div class="font-bold">⚙ Panel Admin</div>
+          <button id="adm-close" class="btn btn-ghost text-xs" style="padding:6px 12px">Cerrar</button>
+        </div>
+        <div class="flex" style="border-bottom:1px solid var(--border)">
+          <button class="adm-tab tab-btn active" data-atab="cuotas">Cuotas</button>
+          <button class="adm-tab tab-btn" data-atab="resultados">Resultados oficiales</button>
+        </div>
+        <div id="adm-body" class="flex-1 overflow-y-auto p-4"></div>
+      </div>
+    </div>
+  `);
+  document.body.appendChild(modal);
+  $('#adm-close').addEventListener('click', () => modal.remove());
+  let admTab = 'cuotas';
+  function renderAdmBody() {
+    $$('.adm-tab').forEach(b => b.classList.toggle('active', b.dataset.atab === admTab));
+    if (admTab === 'cuotas') renderAdmCuotas();
+    else renderAdmResultados();
+  }
+  $$('.adm-tab').forEach(b => b.addEventListener('click', () => { admTab = b.dataset.atab; renderAdmBody(); }));
+  renderAdmBody();
+}
+
+function renderAdmCuotas() {
+  const body = $('#adm-body');
+  body.innerHTML = `
+    <p class="text-xs mb-3" style="color:var(--text-dim)">Mete las cuotas reales de Winamax (1, X, 2). Se guardan en la nube al instante.</p>
+    <div class="space-y-2">
+      ${PARTIDOS_GRUPOS.map(p => {
+        const [mid, grupo, loc, vis] = p;
+        const c = State.cuotas[mid] || [2,3,3];
+        return `<div class="card-2 p-2">
+          <div class="flex items-center justify-between text-xs mb-2">
+            <span class="font-bold">${EQUIPOS[loc].flag} ${EQUIPOS[loc].name} vs ${EQUIPOS[vis].name} ${EQUIPOS[vis].flag}</span>
+            <span style="color:var(--text-dim)">${mid}</span>
+          </div>
+          <div class="grid grid-cols-3 gap-2">
+            <input class="cuota-input bg-transparent border rounded px-2 py-1 text-center text-sm" style="border-color:var(--border)" type="number" step="0.01" min="1" value="${c[0]}" data-mid="${mid}" data-idx="0" placeholder="1">
+            <input class="cuota-input bg-transparent border rounded px-2 py-1 text-center text-sm" style="border-color:var(--border)" type="number" step="0.01" min="1" value="${c[1]}" data-mid="${mid}" data-idx="1" placeholder="X">
+            <input class="cuota-input bg-transparent border rounded px-2 py-1 text-center text-sm" style="border-color:var(--border)" type="number" step="0.01" min="1" value="${c[2]}" data-mid="${mid}" data-idx="2" placeholder="2">
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+  $$('.cuota-input').forEach(inp => {
+    inp.addEventListener('change', async e => {
+      const mid = e.target.dataset.mid;
+      const idx = parseInt(e.target.dataset.idx);
+      const val = parseFloat(e.target.value);
+      if (isNaN(val) || val < 1) { toast('Cuota inválida','err'); return; }
+      State.cuotas[mid][idx] = val;
+      LS.saveCuotas(State.cuotas);
+      if (SUPA_ON) {
+        const c = State.cuotas[mid];
+        const { error } = await supa.from('cuotas').upsert({
+          match_id: mid, cuota_1: c[0], cuota_x: c[1], cuota_2: c[2],
+          fuente: 'winamax', updated_at: new Date().toISOString()
+        });
+        if (error) toast('Error al guardar', 'err');
+        else { State.cuotasModificadas = true; toast('Cuota actualizada','ok'); }
+      } else { toast('Guardado local','ok'); }
+    });
+  });
+}
+
+function renderAdmResultados() {
+  const body = $('#adm-body');
+  // Calcular bracket oficial a partir de los resultados oficiales (admin)
+  // Si admin ha metido todos los resultados de grupos, sabremos qué equipos cruzan en KO
+  const bracketOficial = buildBracket(
+    Object.fromEntries(Object.entries(State.resultados).map(([k,v]) => [k, {gl: v.gl, gv: v.gv, fase: 'auto', tend: tendencia(v.gl, v.gv)}]))
+  );
+  function equiposKO(mid) {
+    // Devuelve {local, vis} oficiales para un partido KO según los resultados ya metidos
+    const buscar = (arr) => arr.find(x => x.mid === mid);
+    return buscar(bracketOficial.r32) || buscar(bracketOficial.r16) || buscar(bracketOficial.qf) || buscar(bracketOficial.sf) || (mid==='F3'?bracketOficial.tercer:mid==='F1'?bracketOficial.final:null);
+  }
+
+  const todos = [
+    ...PARTIDOS_GRUPOS.map(p => ({ mid:p[0], local:p[2], vis:p[3], etiq:`G${p[1]} J${p[5]}` })),
+    ...R32_SLOTS.map((s,i) => { const e = equiposKO(s[0]); return { mid:s[0], local:e?.local, vis:e?.vis, etiq:`32avos ${i+1}` }; }),
+    ...R16_SLOTS.map((s,i) => { const e = equiposKO(s[0]); return { mid:s[0], local:e?.local, vis:e?.vis, etiq:`8vos ${i+1}` }; }),
+    ...QF_SLOTS.map((s,i)  => { const e = equiposKO(s[0]); return { mid:s[0], local:e?.local, vis:e?.vis, etiq:`Cuartos ${i+1}` }; }),
+    ...SF_SLOTS.map((s,i)  => { const e = equiposKO(s[0]); return { mid:s[0], local:e?.local, vis:e?.vis, etiq:`Semis ${i+1}` }; }),
+    (() => { const e = equiposKO('F3'); return { mid:'F3', local:e?.local, vis:e?.vis, etiq:'3er puesto' }; })(),
+    (() => { const e = equiposKO('F1'); return { mid:'F1', local:e?.local, vis:e?.vis, etiq:'FINAL' }; })(),
+  ];
+  body.innerHTML = `
+    <p class="text-xs mb-3" style="color:var(--text-dim)">Marca el resultado oficial de cada partido cuando termine. Esto dispara el cálculo de puntos.</p>
+    <div class="space-y-2">
+      ${todos.map(t => {
+        const r = State.resultados[t.mid] || {};
+        const eqL = t.local ? EQUIPOS[t.local] : null;
+        const eqV = t.vis ? EQUIPOS[t.vis] : null;
+        const titulo = eqL && eqV ? `${eqL.flag} ${eqL.name} vs ${eqV.name} ${eqV.flag}` : `${t.etiq} <span style="color:var(--text-dim)">(eliminatoria — equipos según resultados oficiales)</span>`;
+        return `<div class="card-2 p-2">
+          <div class="flex items-center justify-between text-xs mb-2">
+            <span class="font-bold">${titulo}</span>
+            <span style="color:var(--text-dim)">${t.mid}</span>
+          </div>
+          <div class="flex items-center gap-2 justify-center">
+            <input class="res-input input-score" type="tel" inputmode="numeric" maxlength="2" value="${r.gl!=null?r.gl:''}" data-mid="${t.mid}" data-side="l">
+            <span>-</span>
+            <input class="res-input input-score" type="tel" inputmode="numeric" maxlength="2" value="${r.gv!=null?r.gv:''}" data-mid="${t.mid}" data-side="v">
+            <button class="btn-clear-res text-xs ml-2" data-mid="${t.mid}" style="color:var(--text-dim); padding:4px 8px">borrar</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+  $$('.res-input').forEach(inp => {
+    inp.addEventListener('change', async e => {
+      const mid = e.target.dataset.mid; const side = e.target.dataset.side;
+      const card = e.target.closest('.card-2');
+      const inL = card.querySelector('[data-side="l"]'); const inV = card.querySelector('[data-side="v"]');
+      const gl = parseInt(inL.value); const gv = parseInt(inV.value);
+      if (isNaN(gl) || isNaN(gv)) return;
+      State.resultados[mid] = { gl, gv };
+      LS.saveResults(State.resultados);
+      if (SUPA_ON) {
+        const { error } = await supa.from('resultados').upsert({
+          match_id: mid, gol_local: gl, gol_visitante: gv, updated_at: new Date().toISOString()
+        });
+        if (error) toast('Error','err'); else toast('Resultado registrado','ok');
+      } else toast('Guardado local','ok');
+    });
+  });
+  $$('.btn-clear-res').forEach(b => b.addEventListener('click', async () => {
+    const mid = b.dataset.mid;
+    delete State.resultados[mid];
+    LS.saveResults(State.resultados);
+    if (SUPA_ON) await supa.from('resultados').delete().eq('match_id', mid);
+    toast('Resultado borrado','warn');
+    renderAdmResultados();
+  }));
+}
+
+// ═══════════════════════════════════════════════════════════════
+// INIT
+// ═══════════════════════════════════════════════════════════════
+async function initApp() {
+  await cargarCuotas();
+  await cargarResultados();
+  if (State.user) await cargarPredicciones(State.user.id);
+  renderShell();
+}
+
+(async function bootstrap() {
+  const u = LS.loadUser();
+  if (u) {
+    State.user = u;
+    State.isAdmin = LS.loadAdmin();
+    try { await initApp(); }
+    catch(e) { console.error(e); renderLogin(); }
+  } else {
+    renderLogin();
+  }
+})();
+</script>
+</body>
+</html>

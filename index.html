@@ -113,12 +113,31 @@ create table if not exists config (
   value jsonb not null
 );
 
+create table if not exists predicciones_premios (
+  user_id uuid primary key references usuarios(id) on delete cascade,
+  pichichi text,
+  balon_oro text,
+  guante_oro text,
+  updated_at timestamptz default now()
+);
+
+create table if not exists resultados_premios (
+  id int primary key default 1,
+  pichichi text,
+  balon_oro text,
+  guante_oro text,
+  updated_at timestamptz default now(),
+  check (id = 1)
+);
+
 -- Permitir lectura/escritura anónima (es una porra de cuadrilla, no datos sensibles)
 alter table usuarios enable row level security;
 alter table predicciones enable row level security;
 alter table resultados enable row level security;
 alter table cuotas enable row level security;
 alter table config enable row level security;
+alter table predicciones_premios enable row level security;
+alter table resultados_premios enable row level security;
 
 create policy "open_read"  on usuarios     for select using (true);
 create policy "open_write" on usuarios     for insert with check (true);
@@ -128,6 +147,8 @@ create policy "open_write_res"  on resultados   for all using (true) with check 
 create policy "open_read_cuo"   on cuotas       for select using (true);
 create policy "open_write_cuo"  on cuotas       for all using (true) with check (true);
 create policy "open_all_conf"   on config       for all using (true) with check (true);
+create policy "open_all_prem"   on predicciones_premios for all using (true) with check (true);
+create policy "open_all_resprem" on resultados_premios   for all using (true) with check (true);
 
 ═══════════════════════════════════════════════════════════════
 -->
@@ -146,7 +167,7 @@ create policy "open_all_conf"   on config       for all using (true) with check 
 // CONFIGURACIÓN — RELLENA ESTO ANTES DE NADA
 // ═══════════════════════════════════════════════════════════════
 const SUPABASE_URL  = 'https://grcrloyydcmzecwvuvng.supabase.co'; // ← URL de Supabase (sin /rest/v1/ al final)
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdyY3Jsb3l5ZGNtemVjd3Z1dm5nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3Mzk5NzksImV4cCI6MjA5NjMxNTk3OX0.z4BdIFEBksoO8t4jHFtQyesCd9dPz_oLmGlaiRsEdJ8'
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdyY3Jsb3l5ZGNtemVjd3Z1dm5nIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA3Mzk5NzksImV4cCI6MjA5NjMxNTk3OX0.z4BdIFEBksoO8t4jHFtQyesCd9dPz_oLmGlaiRsEdJ8';
 const ADMIN_PIN     = '7777'; // ⚠ CÁMBIALO ANTES DE COMPARTIR LA APP
 
 // Si dejas SUPABASE_URL vacío, la app funciona en modo offline (solo localStorage)
@@ -171,6 +192,137 @@ function pillClassMult(m) {
   if (m === 1.4) return 'pill-x14';
   return 'pill-x16';
 }
+
+// ═══════════════════════════════════════════════════════════════
+// PREMIOS INDIVIDUALES (Pichichi, Balón de Oro, Guante de Oro)
+// Cuotas reales de Winamax (8 jun 2026)
+// ═══════════════════════════════════════════════════════════════
+const PUNTOS_PICHICHI   = 15;
+const PUNTOS_BALON_ORO  = 15;
+const PUNTOS_GUANTE_ORO = 10;
+
+const CANDIDATOS_PICHICHI = [
+  {n:'Kylian Mbappé',      p:'Francia',       f:'🇫🇷', o:6.50},
+  {n:'Harry Kane',         p:'Inglaterra',    f:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', o:7.50},
+  {n:'Mikel Oyarzabal',    p:'España',        f:'🇪🇸', o:13.00},
+  {n:'Erling Haaland',     p:'Noruega',       f:'🇳🇴', o:15.00},
+  {n:'Lionel Messi',       p:'Argentina',     f:'🇦🇷', o:17.00},
+  {n:'Cristiano Ronaldo',  p:'Portugal',      f:'🇵🇹', o:21.00},
+  {n:'Lamine Yamal',       p:'España',        f:'🇪🇸', o:21.00},
+  {n:'Julian Alvarez',     p:'Argentina',     f:'🇦🇷', o:26.00},
+  {n:'Kai Havertz',        p:'Alemania',      f:'🇩🇪', o:26.00},
+  {n:'Raphinha',           p:'Brasil',        f:'🇧🇷', o:26.00},
+  {n:'Vinicius Jr.',       p:'Brasil',        f:'🇧🇷', o:26.00},
+  {n:'Lautaro Martinez',   p:'Argentina',     f:'🇦🇷', o:34.00},
+  {n:'Ousmane Dembele',    p:'Francia',       f:'🇫🇷', o:34.00},
+  {n:'Cody Gakpo',         p:'Países Bajos',  f:'🇳🇱', o:41.00},
+  {n:'Igor Thiago',        p:'Brasil',        f:'🇧🇷', o:41.00},
+  {n:'Luis Suarez',        p:'Colombia',      f:'🇨🇴', o:41.00},
+  {n:'Michael Olise',      p:'Francia',       f:'🇫🇷', o:41.00},
+  {n:'Romelu Lukaku',      p:'Bélgica',       f:'🇧🇪', o:41.00},
+  {n:'Bruno Fernandes',    p:'Portugal',      f:'🇵🇹', o:51.00},
+  {n:'Bukayo Saka',        p:'Inglaterra',    f:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', o:51.00},
+  {n:'Dani Olmo',          p:'España',        f:'🇪🇸', o:51.00},
+  {n:'Ferran Torres',      p:'España',        f:'🇪🇸', o:51.00},
+  {n:'Florian Wirtz',      p:'Alemania',      f:'🇩🇪', o:51.00},
+  {n:'Luis Diaz',          p:'Colombia',      f:'🇨🇴', o:51.00},
+  {n:'Matheus Cunha',      p:'Brasil',        f:'🇧🇷', o:51.00},
+  {n:'Memphis Depay',      p:'Países Bajos',  f:'🇳🇱', o:51.00},
+  {n:'Morgan Rogers',      p:'Inglaterra',    f:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', o:51.00},
+  {n:'Charles De Ketelaere',p:'Bélgica',      f:'🇧🇪', o:67.00},
+  {n:'Darwin Nunez',       p:'Uruguay',       f:'🇺🇾', o:67.00},
+  {n:'Desire Doue',        p:'Francia',       f:'🇫🇷', o:67.00},
+  {n:'Jamal Musiala',      p:'Alemania',      f:'🇩🇪', o:67.00},
+  {n:'Jeremy Doku',        p:'Bélgica',       f:'🇧🇪', o:67.00},
+  {n:'Joao Felix',         p:'Portugal',      f:'🇵🇹', o:67.00},
+  {n:'Jude Bellingham',    p:'Inglaterra',    f:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', o:67.00},
+  {n:'Kevin De Bruyne',    p:'Bélgica',       f:'🇧🇪', o:67.00},
+  {n:'Leroy Sane',         p:'Alemania',      f:'🇩🇪', o:67.00},
+  {n:'Marcus Rashford',    p:'Inglaterra',    f:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', o:67.00},
+  {n:'Mikel Merino',       p:'España',        f:'🇪🇸', o:67.00},
+  {n:'Mohamed Salah',      p:'Egipto',        f:'🇪🇬', o:67.00},
+  {n:'Nick Woltemade',     p:'Alemania',      f:'🇩🇪', o:67.00},
+  {n:'Viktor Gyokeres',    p:'Suecia',        f:'🇸🇪', o:67.00},
+  {n:'Alexander Isak',     p:'Suecia',        f:'🇸🇪', o:81.00},
+  {n:'Anthony Gordon',     p:'Inglaterra',    f:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', o:81.00},
+  {n:'Ayase Ueda',         p:'Japón',         f:'🇯🇵', o:81.00},
+  {n:'Donyell Malen',      p:'Países Bajos',  f:'🇳🇱', o:81.00},
+  {n:'Enner Valencia',     p:'Ecuador',       f:'🇪🇨', o:81.00},
+  {n:'Goncalo Ramos',      p:'Portugal',      f:'🇵🇹', o:81.00},
+  {n:'Neymar Jr',          p:'Brasil',        f:'🇧🇷', o:81.00},
+];
+
+const CANDIDATOS_BALON_ORO = [
+  {n:'Harry Kane',         p:'Inglaterra',    f:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', o:8.00},
+  {n:'Lamine Yamal',       p:'España',        f:'🇪🇸', o:9.00},
+  {n:'Kylian Mbappe',      p:'Francia',       f:'🇫🇷', o:11.00},
+  {n:'Lionel Messi',       p:'Argentina',     f:'🇦🇷', o:11.00},
+  {n:'Michael Olise',      p:'Francia',       f:'🇫🇷', o:11.00},
+  {n:'Vinicius Jr.',       p:'Brasil',        f:'🇧🇷', o:15.00},
+  {n:'Bruno Fernandes',    p:'Portugal',      f:'🇵🇹', o:21.00},
+  {n:'Declan Rice',        p:'Inglaterra',    f:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', o:21.00},
+  {n:'Pedri',              p:'España',        f:'🇪🇸', o:21.00},
+  {n:'Rayan Cherki',       p:'Francia',       f:'🇫🇷', o:21.00},
+  {n:'Jude Bellingham',    p:'Inglaterra',    f:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', o:26.00},
+  {n:'Mikel Oyarzabal',    p:'España',        f:'🇪🇸', o:26.00},
+  {n:'Ousmane Dembele',    p:'Francia',       f:'🇫🇷', o:26.00},
+  {n:'Raphinha',           p:'Brasil',        f:'🇧🇷', o:26.00},
+  {n:'Rodri',              p:'España',        f:'🇪🇸', o:26.00},
+  {n:'Vitinha',            p:'Portugal',      f:'🇵🇹', o:26.00},
+  {n:'Erling Haaland',     p:'Noruega',       f:'🇳🇴', o:29.00},
+  {n:'Bernardo Silva',     p:'Portugal',      f:'🇵🇹', o:34.00},
+  {n:'Cristiano Ronaldo',  p:'Portugal',      f:'🇵🇹', o:34.00},
+  {n:'Fabian Ruiz',        p:'España',        f:'🇪🇸', o:34.00},
+  {n:'Neymar Jr',          p:'Brasil',        f:'🇧🇷', o:34.00},
+  {n:'Desire Doue',        p:'Francia',       f:'🇫🇷', o:41.00},
+  {n:'Endrick',            p:'Brasil',        f:'🇧🇷', o:41.00},
+  {n:'Jamal Musiala',      p:'Alemania',      f:'🇩🇪', o:41.00},
+  {n:'Jeremy Doku',        p:'Bélgica',       f:'🇧🇪', o:41.00},
+  {n:'Joao Felix',         p:'Portugal',      f:'🇵🇹', o:41.00},
+  {n:'Julian Alvarez',     p:'Argentina',     f:'🇦🇷', o:41.00},
+  {n:'Achraf Hakimi',      p:'Marruecos',     f:'🇲🇦', o:51.00},
+  {n:'Bukayo Saka',        p:'Inglaterra',    f:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', o:51.00},
+  {n:'Florian Wirtz',      p:'Alemania',      f:'🇩🇪', o:51.00},
+  {n:'Gabriel Magalhaes',  p:'Brasil',        f:'🇧🇷', o:51.00},
+  {n:'Lautaro Martinez',   p:'Argentina',     f:'🇦🇷', o:51.00},
+  {n:'Virgil van Dijk',    p:'Países Bajos',  f:'🇳🇱', o:51.00},
+  {n:'William Saliba',     p:'Francia',       f:'🇫🇷', o:51.00},
+  {n:'Alexander Isak',     p:'Suecia',        f:'🇸🇪', o:67.00},
+  {n:'Dani Olmo',          p:'España',        f:'🇪🇸', o:67.00},
+  {n:'Elliot Anderson',    p:'Inglaterra',    f:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', o:67.00},
+  {n:'Federico Valverde',  p:'Uruguay',       f:'🇺🇾', o:67.00},
+  {n:'Granit Xhaka',       p:'Suiza',         f:'🇨🇭', o:67.00},
+  {n:'Joao Neves',         p:'Portugal',      f:'🇵🇹', o:67.00},
+  {n:'Joshua Kimmich',     p:'Alemania',      f:'🇩🇪', o:67.00},
+  {n:'Kevin De Bruyne',    p:'Bélgica',       f:'🇧🇪', o:67.00},
+];
+
+const CANDIDATOS_GUANTE_ORO = [
+  {n:'Emiliano Martinez',  p:'Argentina',     f:'🇦🇷', o:5.00},
+  {n:'Unai Simon',         p:'España',        f:'🇪🇸', o:6.00},
+  {n:'Alisson Becker',     p:'Brasil',        f:'🇧🇷', o:6.50},
+  {n:'Mike Maignan',       p:'Francia',       f:'🇫🇷', o:7.00},
+  {n:'Jordan Pickford',    p:'Inglaterra',    f:'🏴󠁧󠁢󠁥󠁮󠁧󠁿', o:8.00},
+  {n:'Ederson',            p:'Brasil',        f:'🇧🇷', o:9.00},
+  {n:'David Raya',         p:'España',        f:'🇪🇸', o:9.00},
+  {n:'Diogo Costa',        p:'Portugal',      f:'🇵🇹', o:11.00},
+  {n:'Manuel Neuer',       p:'Alemania',      f:'🇩🇪', o:17.00},
+  {n:'Bart Verbruggen',    p:'Países Bajos',  f:'🇳🇱', o:21.00},
+  {n:'Oliver Baumann',     p:'Alemania',      f:'🇩🇪', o:21.00},
+  {n:'Thibaut Courtois',   p:'Bélgica',       f:'🇧🇪', o:21.00},
+  {n:'Joan Garcia',        p:'España',        f:'🇪🇸', o:26.00},
+  {n:'Senne Lammens',      p:'Bélgica',       f:'🇧🇪', o:29.00},
+  {n:'Orjan Nyland',       p:'Noruega',       f:'🇳🇴', o:34.00},
+  {n:'Matt Freese',        p:'EE.UU.',        f:'🇺🇸', o:41.00},
+  {n:'Camilo Vargas',      p:'Colombia',      f:'🇨🇴', o:51.00},
+  {n:'Gregor Kobel',       p:'Suiza',         f:'🇨🇭', o:51.00},
+  {n:'Sergio Rochet',      p:'Uruguay',       f:'🇺🇾', o:67.00},
+  {n:'Francisco Ochoa',    p:'México',        f:'🇲🇽', o:81.00},
+  {n:'Hernan Galindez',    p:'Ecuador',       f:'🇪🇨', o:81.00},
+  {n:'Jose Rangel',        p:'México',        f:'🇲🇽', o:81.00},
+  {n:'Yassine Bounou',     p:'Marruecos',     f:'🇲🇦', o:81.00},
+  {n:'Zion Suzuki',        p:'Japón',         f:'🇯🇵', o:81.00},
+];
 
 // ═══════════════════════════════════════════════════════════════
 // DATOS DEL MUNDIAL 2026 (sorteo 5-dic-2025, playoffs cerrados)
@@ -382,6 +534,9 @@ const State = {
   resultados: {},       // { match_id: { gl, gv } }
   allUsers: [],         // para leaderboard
   allPredicciones: {},  // { user_id: { match_id: {...} } }
+  premios: { pichichi:null, balon_oro:null, guante_oro:null }, // mi predicción premios
+  allPremios: {},       // { user_id: { pichichi, balon_oro, guante_oro } }
+  resultadosPremios: { pichichi:null, balon_oro:null, guante_oro:null }, // oficiales
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -513,6 +668,70 @@ async function cargarTodasPredicciones() {
       fase: p.fase
     };
   });
+}
+
+async function cargarMisPremios(uid) {
+  if (SUPA_ON && !uid.startsWith('local_')) {
+    const { data } = await supa.from('predicciones_premios').select('*').eq('user_id', uid).maybeSingle();
+    if (data) {
+      State.premios = { pichichi:data.pichichi, balon_oro:data.balon_oro, guante_oro:data.guante_oro };
+      localStorage.setItem('porra_premios_'+uid, JSON.stringify(State.premios));
+      return;
+    }
+  }
+  try { State.premios = JSON.parse(localStorage.getItem('porra_premios_'+uid)) || {pichichi:null,balon_oro:null,guante_oro:null}; }
+  catch { State.premios = {pichichi:null,balon_oro:null,guante_oro:null}; }
+}
+
+async function cargarTodosPremios() {
+  if (!SUPA_ON) { State.allPremios = {}; return; }
+  const { data } = await supa.from('predicciones_premios').select('*');
+  State.allPremios = {};
+  (data||[]).forEach(p => {
+    State.allPremios[p.user_id] = { pichichi:p.pichichi, balon_oro:p.balon_oro, guante_oro:p.guante_oro };
+  });
+}
+
+async function cargarResultadosPremios() {
+  if (SUPA_ON) {
+    const { data } = await supa.from('resultados_premios').select('*').eq('id', 1).maybeSingle();
+    if (data) {
+      State.resultadosPremios = { pichichi:data.pichichi, balon_oro:data.balon_oro, guante_oro:data.guante_oro };
+      localStorage.setItem('porra_respremios', JSON.stringify(State.resultadosPremios));
+      return;
+    }
+  }
+  try { State.resultadosPremios = JSON.parse(localStorage.getItem('porra_respremios')) || {pichichi:null,balon_oro:null,guante_oro:null}; }
+  catch { State.resultadosPremios = {pichichi:null,balon_oro:null,guante_oro:null}; }
+}
+
+async function guardarMisPremios() {
+  localStorage.setItem('porra_premios_'+State.user.id, JSON.stringify(State.premios));
+  if (SUPA_ON && !State.user.id.startsWith('local_')) {
+    const { error } = await supa.from('predicciones_premios').upsert({
+      user_id: State.user.id,
+      pichichi: State.premios.pichichi,
+      balon_oro: State.premios.balon_oro,
+      guante_oro: State.premios.guante_oro,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'user_id' });
+    if (error) throw error;
+  }
+}
+
+async function guardarResultadoPremio(campo, valor) {
+  State.resultadosPremios[campo] = valor;
+  localStorage.setItem('porra_respremios', JSON.stringify(State.resultadosPremios));
+  if (SUPA_ON) {
+    const { error } = await supa.from('resultados_premios').upsert({
+      id: 1,
+      pichichi: State.resultadosPremios.pichichi,
+      balon_oro: State.resultadosPremios.balon_oro,
+      guante_oro: State.resultadosPremios.guante_oro,
+      updated_at: new Date().toISOString()
+    }, { onConflict: 'id' });
+    if (error) throw error;
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -737,10 +956,10 @@ function buscarPartidoEnBracket(b, mid) {
          (mid==='F3' ? b.tercer : mid==='F1' ? b.final : null);
 }
 
-function puntuarUsuario(predicciones) {
+function puntuarUsuario(predicciones, premiosUser) {
   let total = 0, underdog = 0, aciertosT = 0, aciertosE = 0;
   let porFase = { grupos:0, ko:0 };
-  let supervivencia = 0, cruces = 0;
+  let supervivencia = 0, cruces = 0, premios = 0;
 
   const bracketUser = buildBracket(predicciones);
   const bracketOf = buildBracket(
@@ -815,19 +1034,29 @@ function puntuarUsuario(predicciones) {
   total += supervivencia + cruces;
   porFase.ko = supervivencia + cruces;
 
+  // ──── PREMIOS INDIVIDUALES ────
+  if (premiosUser && State.resultadosPremios) {
+    if (premiosUser.pichichi && premiosUser.pichichi === State.resultadosPremios.pichichi)     premios += PUNTOS_PICHICHI;
+    if (premiosUser.balon_oro && premiosUser.balon_oro === State.resultadosPremios.balon_oro)  premios += PUNTOS_BALON_ORO;
+    if (premiosUser.guante_oro && premiosUser.guante_oro === State.resultadosPremios.guante_oro) premios += PUNTOS_GUANTE_ORO;
+  }
+  total += premios;
+
   return {
     total: Math.round(total * 10) / 10,
     underdog: Math.round(underdog * 10) / 10,
     aciertosT, aciertosE, porFase,
     supervivencia: Math.round(supervivencia*10)/10,
     cruces: Math.round(cruces*10)/10,
+    premios: Math.round(premios*10)/10,
   };
 }
 
 function calcularLeaderboard() {
   const filas = State.allUsers.map(u => {
     const preds = State.allPredicciones[u.id] || {};
-    const score = puntuarUsuario(preds);
+    const prem  = State.allPremios[u.id] || {};
+    const score = puntuarUsuario(preds, prem);
     return { ...u, ...score };
   });
   filas.sort((a,b) => b.total - a.total || b.aciertosE - a.aciertosE);
@@ -922,10 +1151,11 @@ function renderShell() {
         </div>
       </div>
       ${banner}
-      <nav class="flex border-t" style="border-color:var(--border)">
-        <button class="tab-btn ${State.tab==='predicciones'?'active':''}" data-tab="predicciones">⚽ Predicciones</button>
-        <button class="tab-btn ${State.tab==='leaderboard'?'active':''}" data-tab="leaderboard">🏆 Clasificación</button>
-        <button class="tab-btn ${State.tab==='resumen'?'active':''}" data-tab="resumen">📊 Mi Bracket</button>
+      <nav class="flex border-t scroll-x" style="border-color:var(--border)">
+        <button class="tab-btn ${State.tab==='predicciones'?'active':''}" data-tab="predicciones">⚽ Partidos</button>
+        <button class="tab-btn ${State.tab==='premios'?'active':''}" data-tab="premios">🏅 Premios</button>
+        <button class="tab-btn ${State.tab==='leaderboard'?'active':''}" data-tab="leaderboard">🏆 Ranking</button>
+        <button class="tab-btn ${State.tab==='resumen'?'active':''}" data-tab="resumen">📊 Bracket</button>
       </nav>
     </header>
     <main id="main" class="px-3 py-4"></main>
@@ -942,6 +1172,7 @@ function renderShell() {
 
 function renderMain() {
   if (State.tab === 'predicciones') renderPredicciones();
+  else if (State.tab === 'premios') renderPremios();
   else if (State.tab === 'leaderboard') renderLeaderboard();
   else renderResumen();
 }
@@ -1183,13 +1414,94 @@ function enlazarInputsPartido() {
 }
 
 // ═══════════════════════════════════════════════════════════════
-// RENDER: LEADERBOARD
+// RENDER: PREMIOS INDIVIDUALES
 // ═══════════════════════════════════════════════════════════════
+function renderPremios() {
+  const main = $('#main');
+  const res = State.resultadosPremios;
+  const mis = State.premios;
+  const yaCerrado = res.pichichi || res.balon_oro || res.guante_oro; // si admin ha metido algo oficial
+
+  function bloque(tituloIcono, titulo, descripcion, campo, candidatos, puntos) {
+    const valor = mis[campo] || '';
+    const oficial = res[campo];
+    const acerto = oficial && valor === oficial;
+    const fallo = oficial && valor && valor !== oficial;
+    return `
+      <div class="card p-4 mb-3">
+        <div class="flex items-start justify-between mb-3">
+          <div>
+            <h3 class="font-bold text-base">${tituloIcono} ${titulo}</h3>
+            <p class="text-xs mt-1" style="color:var(--text-dim)">${descripcion}</p>
+          </div>
+          <span class="pill pill-x14">+${puntos} pts</span>
+        </div>
+        ${oficial ? `
+          <div class="card-2 p-2 mb-3 text-xs">
+            <div style="color:var(--text-dim)">Ganador oficial:</div>
+            <div class="font-bold" style="color:var(--gold)">${oficial}</div>
+          </div>
+        ` : ''}
+        <select class="premio-select w-full bg-transparent border rounded-lg px-3 py-3 text-sm focus:outline-none"
+                style="border-color:${acerto?'var(--grass)':fallo?'var(--danger)':'var(--border)'}; color:var(--text)"
+                data-campo="${campo}" ${oficial?'disabled':''}>
+          <option value="">— Elige tu apuesta —</option>
+          ${candidatos.map(c => `<option value="${c.n}" ${valor===c.n?'selected':''} style="background:var(--bg-card)">${c.f} ${c.n} (${c.p}) · @${c.o.toFixed(2)}</option>`).join('')}
+        </select>
+        ${acerto ? `<div class="text-xs mt-2" style="color:var(--grass)">✓ ¡Acertaste! +${puntos} pts</div>`:''}
+        ${fallo  ? `<div class="text-xs mt-2" style="color:var(--danger)">✗ Falló</div>`:''}
+      </div>
+    `;
+  }
+
+  main.innerHTML = `
+    <div class="card p-4 mb-4" style="background:linear-gradient(135deg, rgba(255,200,87,0.08), rgba(0,255,136,0.04)); border-color:rgba(255,200,87,0.3)">
+      <h2 class="font-black text-lg mb-1" style="color:var(--gold)">🏅 Premios Individuales</h2>
+      <p class="text-xs" style="color:var(--text-dim)">
+        Tres apuestas a ganador único. Cuotas reales de Winamax (8 jun). Puntos al acertar:
+        <b style="color:var(--gold)">+${PUNTOS_PICHICHI + PUNTOS_BALON_ORO + PUNTOS_GUANTE_ORO} máximo</b>.
+        Si acertaste algo, se queda bloqueado en cuanto el admin lo confirme.
+      </p>
+    </div>
+
+    ${bloque('⚽', 'Pichichi (máximo goleador)', 'El jugador que más goles meta en todo el Mundial', 'pichichi', CANDIDATOS_PICHICHI, PUNTOS_PICHICHI)}
+    ${bloque('🌟', 'Balón de Oro (mejor jugador)', 'El mejor jugador del torneo según FIFA', 'balon_oro', CANDIDATOS_BALON_ORO, PUNTOS_BALON_ORO)}
+    ${bloque('🧤', 'Guante de Oro (mejor portero)', 'El mejor portero del torneo según FIFA', 'guante_oro', CANDIDATOS_GUANTE_ORO, PUNTOS_GUANTE_ORO)}
+
+    <button id="btn-save-premios" class="float-save btn btn-primary flex items-center gap-2 shadow-2xl">
+      ☁ Guardar
+    </button>
+  `;
+
+  $$('.premio-select').forEach(sel => {
+    sel.addEventListener('change', e => {
+      const campo = e.target.dataset.campo;
+      State.premios[campo] = e.target.value || null;
+    });
+  });
+
+  $('#btn-save-premios').addEventListener('click', async () => {
+    const btn = $('#btn-save-premios'); btn.disabled = true; btn.innerHTML = 'Guardando...';
+    try {
+      await guardarMisPremios();
+      btn.classList.add('save-ok'); btn.innerHTML = '✓ Guardado';
+      toast('Premios guardados', 'ok');
+    } catch(e) {
+      btn.innerHTML = '⚠ Error';
+      toast('Error al guardar', 'err');
+    }
+    setTimeout(()=>{ btn.disabled = false; btn.innerHTML = '☁ Guardar'; btn.classList.remove('save-ok'); }, 1800);
+  });
+}
+
+
 async function renderLeaderboard() {
   const main = $('#main');
   main.innerHTML = `<div class="card p-6 text-center skel" style="height:200px"></div>`;
   await cargarTodasPredicciones();
+  await cargarTodosPremios();
   await cargarResultados();
+  await cargarResultadosPremios();
   const { filas, masterId } = calcularLeaderboard();
   const hayResultados = Object.keys(State.resultados).length > 0;
 
@@ -1234,22 +1546,26 @@ async function renderLeaderboard() {
               <div class="text-[10px]" style="color:var(--text-dim)">puntos</div>
             </div>
           </summary>
-          <div class="px-4 pb-3 grid grid-cols-4 gap-2 text-xs">
+          <div class="px-4 pb-3 grid grid-cols-5 gap-1 text-xs">
             <div class="card-2 p-2 text-center">
-              <div class="font-bold">${f.porFase.grupos.toFixed(1)}</div>
-              <div style="color:var(--text-dim)">grupos</div>
+              <div class="font-bold">${f.porFase.grupos.toFixed(0)}</div>
+              <div class="text-[10px]" style="color:var(--text-dim)">grupos</div>
             </div>
             <div class="card-2 p-2 text-center">
-              <div class="font-bold">${f.supervivencia.toFixed(1)}</div>
-              <div style="color:var(--text-dim)">supervivencia</div>
+              <div class="font-bold">${f.supervivencia.toFixed(0)}</div>
+              <div class="text-[10px]" style="color:var(--text-dim)">superv.</div>
             </div>
             <div class="card-2 p-2 text-center">
-              <div class="font-bold">${f.cruces.toFixed(1)}</div>
-              <div style="color:var(--text-dim)">cruces KO</div>
+              <div class="font-bold">${f.cruces.toFixed(0)}</div>
+              <div class="text-[10px]" style="color:var(--text-dim)">cruces</div>
             </div>
             <div class="card-2 p-2 text-center">
-              <div class="font-bold" style="color:var(--gold)">${f.underdog.toFixed(1)}</div>
-              <div style="color:var(--text-dim)">underdogs</div>
+              <div class="font-bold" style="color:var(--gold)">${(f.premios||0).toFixed(0)}</div>
+              <div class="text-[10px]" style="color:var(--text-dim)">premios</div>
+            </div>
+            <div class="card-2 p-2 text-center">
+              <div class="font-bold" style="color:var(--gold)">${f.underdog.toFixed(0)}</div>
+              <div class="text-[10px]" style="color:var(--text-dim)">underdog</div>
             </div>
           </div>
         </details>`;
@@ -1268,7 +1584,7 @@ function renderResumen() {
   const main = $('#main');
   const bracket = buildBracket(State.predicciones);
   const totalPreds = Object.keys(State.predicciones).length;
-  const previstos = puntuarUsuario(State.predicciones);
+  const previstos = puntuarUsuario(State.predicciones, State.premios);
   const numCuotas = Object.values(State.predicciones).filter(p => p.fase==='grupos' && p.mult);
   const conteoMult = { 1:0, 1.2:0, 1.4:0, 1.6:0 };
   numCuotas.forEach(p => { if (conteoMult[p.mult] != null) conteoMult[p.mult]++; });
@@ -1371,9 +1687,10 @@ function renderAdmin() {
           <div class="font-bold">⚙ Panel Admin</div>
           <button id="adm-close" class="btn btn-ghost text-xs" style="padding:6px 12px">Cerrar</button>
         </div>
-        <div class="flex" style="border-bottom:1px solid var(--border)">
+        <div class="flex scroll-x" style="border-bottom:1px solid var(--border)">
           <button class="adm-tab tab-btn active" data-atab="cuotas">Cuotas</button>
-          <button class="adm-tab tab-btn" data-atab="resultados">Resultados oficiales</button>
+          <button class="adm-tab tab-btn" data-atab="resultados">Resultados</button>
+          <button class="adm-tab tab-btn" data-atab="premios">Premios oficiales</button>
         </div>
         <div id="adm-body" class="flex-1 overflow-y-auto p-4"></div>
       </div>
@@ -1385,6 +1702,7 @@ function renderAdmin() {
   function renderAdmBody() {
     $$('.adm-tab').forEach(b => b.classList.toggle('active', b.dataset.atab === admTab));
     if (admTab === 'cuotas') renderAdmCuotas();
+    else if (admTab === 'premios') renderAdmPremios();
     else renderAdmResultados();
   }
   $$('.adm-tab').forEach(b => b.addEventListener('click', () => { admTab = b.dataset.atab; renderAdmBody(); }));
@@ -1507,12 +1825,53 @@ function renderAdmResultados() {
 }
 
 // ═══════════════════════════════════════════════════════════════
+// RENDER ADMIN: PREMIOS OFICIALES
+// ═══════════════════════════════════════════════════════════════
+function renderAdmPremios() {
+  const body = $('#adm-body');
+  const res = State.resultadosPremios;
+  function bloqueAdm(label, campo, candidatos) {
+    return `
+      <div class="card-2 p-3 mb-3">
+        <div class="font-bold text-sm mb-2">${label}</div>
+        <select class="adm-premio-select w-full bg-transparent border rounded-lg px-3 py-2 text-sm focus:outline-none"
+                style="border-color:var(--border); color:var(--text)" data-campo="${campo}">
+          <option value="">— Sin definir todavía —</option>
+          ${candidatos.map(c => `<option value="${c.n}" ${res[campo]===c.n?'selected':''} style="background:var(--bg-card)">${c.f} ${c.n} (${c.p})</option>`).join('')}
+        </select>
+      </div>`;
+  }
+  body.innerHTML = `
+    <p class="text-xs mb-3" style="color:var(--text-dim)">
+      Cuando termine el Mundial, mete aquí los ganadores oficiales de cada premio. Se aplica el cálculo de puntos al instante.
+    </p>
+    ${bloqueAdm('⚽ Pichichi (máximo goleador)', 'pichichi', CANDIDATOS_PICHICHI)}
+    ${bloqueAdm('🌟 Balón de Oro (mejor jugador)', 'balon_oro', CANDIDATOS_BALON_ORO)}
+    ${bloqueAdm('🧤 Guante de Oro (mejor portero)', 'guante_oro', CANDIDATOS_GUANTE_ORO)}
+  `;
+  $$('.adm-premio-select').forEach(sel => {
+    sel.addEventListener('change', async e => {
+      const campo = e.target.dataset.campo;
+      const valor = e.target.value || null;
+      try {
+        await guardarResultadoPremio(campo, valor);
+        toast('Premio actualizado','ok');
+      } catch(err) { toast('Error al guardar','err'); }
+    });
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
 // INIT
 // ═══════════════════════════════════════════════════════════════
 async function initApp() {
   await cargarCuotas();
   await cargarResultados();
-  if (State.user) await cargarPredicciones(State.user.id);
+  await cargarResultadosPremios();
+  if (State.user) {
+    await cargarPredicciones(State.user.id);
+    await cargarMisPremios(State.user.id);
+  }
   renderShell();
 }
 

@@ -572,6 +572,7 @@ const State = {
   isAdmin: false,
   tab: 'predicciones',
   faseTab: 'grupos',    // dentro de predicciones
+  rivalesMatchId: 'A1', // partido seleccionado en Resultados rivales
   cuotas: {...CUOTAS_INICIALES}, // se sobreescribe con DB si hay
   cuotasModificadas: false,
   predicciones: {},     // { match_id: { gl, gv, cuota, mult, tend } }
@@ -1330,6 +1331,7 @@ function renderShell() {
       <nav class="flex border-t scroll-x" style="border-color:var(--border)">
         <button class="tab-btn ${State.tab==='predicciones'?'active':''}" data-tab="predicciones">⚽ Partidos</button>
         <button class="tab-btn ${State.tab==='premios'?'active':''}" data-tab="premios">🏅 Premios</button>
+        <button class="tab-btn ${State.tab==='rivales'?'active':''}" data-tab="rivales">👀 Resultados rivales</button>
         <button class="tab-btn ${State.tab==='leaderboard'?'active':''}" data-tab="leaderboard">🏆 Ranking</button>
         <button class="tab-btn ${State.tab==='resumen'?'active':''}" data-tab="resumen">📊 Bracket</button>
       </nav>
@@ -1349,6 +1351,7 @@ function renderShell() {
 function renderMain() {
   if (State.tab === 'predicciones') renderPredicciones();
   else if (State.tab === 'premios') renderPremios();
+  else if (State.tab === 'rivales') renderRivales();
   else if (State.tab === 'leaderboard') renderLeaderboard();
   else renderResumen();
 }
@@ -1768,6 +1771,195 @@ async function renderLeaderboard() {
     </div>
     ${renderGraficaEvolucion(calcularHistorico())}
   `;
+}
+
+
+// ═══════════════════════════════════════════════════════════════
+// RENDER: RESULTADOS DE LOS RIVALES
+// ═══════════════════════════════════════════════════════════════
+function tendenciaTexto(t) {
+  return t === '1' ? 'Gana local' : t === '2' ? 'Gana visitante' : 'Empate';
+}
+
+function pillTendencia(t) {
+  if (t === '1') return '<span class="pill pill-x12">1 · Local</span>';
+  if (t === '2') return '<span class="pill pill-x16">2 · Visitante</span>';
+  return '<span class="pill pill-x14">X · Empate</span>';
+}
+
+function opcionPartidoGrupo(p) {
+  const [mid, grupo, loc, vis, fecha] = p;
+  const eqL = EQUIPOS[loc], eqV = EQUIPOS[vis];
+  return `${fecha} · G${grupo} · ${eqL.name} vs ${eqV.name}`;
+}
+
+function renderSelectorPartidos(selectedMid) {
+  const jornadas = [1,2,3];
+  return `
+    <select id="rival-match-select" class="w-full font-bold text-sm" style="background:var(--bg-deep); color:var(--text); border:1px solid var(--border); border-radius:12px; padding:12px">
+      ${jornadas.map(j => `
+        <optgroup label="Jornada ${j}">
+          ${PARTIDOS_GRUPOS.filter(p => p[5] === j).map(p => `
+            <option value="${p[0]}" ${p[0] === selectedMid ? 'selected' : ''}>${opcionPartidoGrupo(p)}</option>
+          `).join('')}
+        </optgroup>
+      `).join('')}
+    </select>
+  `;
+}
+
+async function renderRivales() {
+  const main = $('#main');
+
+  if (prediccionesAbiertas()) {
+    main.innerHTML = `
+      <div class="card p-8 text-center">
+        <div class="text-5xl mb-3">🔒</div>
+        <div class="font-bold text-base mb-2">Resultados rivales bloqueados</div>
+        <div class="text-sm" style="color:var(--text-dim)">
+          Para evitar copiar resultados, esta pestaña se desbloquea cuando se cierren las predicciones.
+        </div>
+      </div>`;
+    return;
+  }
+
+  if (!SUPA_ON) {
+    main.innerHTML = `
+      <div class="card p-8 text-center">
+        <div class="text-5xl mb-3">📡</div>
+        <div class="font-bold text-base mb-2">No disponible en modo offline</div>
+        <div class="text-sm" style="color:var(--text-dim)">
+          Esta vista necesita Supabase para leer las predicciones de los demás jugadores.
+        </div>
+      </div>`;
+    return;
+  }
+
+  main.innerHTML = `<div class="card p-6 text-center skel" style="height:200px"></div>`;
+  await cargarTodasPredicciones();
+
+  let selectedMid = State.rivalesMatchId || PARTIDOS_GRUPOS[0][0];
+  let partido = PARTIDOS_GRUPOS.find(p => p[0] === selectedMid);
+  if (!partido) {
+    selectedMid = PARTIDOS_GRUPOS[0][0];
+    State.rivalesMatchId = selectedMid;
+    partido = PARTIDOS_GRUPOS[0];
+  }
+
+  const [mid, grupo, loc, vis, fecha, jornada] = partido;
+  const eqL = EQUIPOS[loc], eqV = EQUIPOS[vis];
+  const rivales = (State.allUsers || [])
+    .filter(u => u.id !== State.user.id)
+    .map(u => ({ user: u, pred: State.allPredicciones[u.id]?.[mid] }))
+    .filter(x => x.pred && x.pred.gl != null && x.pred.gv != null)
+    .sort((a,b) => a.user.nombre.localeCompare(b.user.nombre));
+
+  const miPred = State.allPredicciones[State.user.id]?.[mid] || State.predicciones[mid];
+  const conteoTend = { '1':0, 'X':0, '2':0 };
+  const marcadores = {};
+  rivales.forEach(({pred}) => {
+    const t = tendencia(pred.gl, pred.gv);
+    conteoTend[t]++;
+    const k = `${pred.gl}-${pred.gv}`;
+    marcadores[k] = (marcadores[k] || 0) + 1;
+  });
+  const marcadorTop = Object.entries(marcadores).sort((a,b) => b[1] - a[1])[0];
+
+  main.innerHTML = `
+    <div class="card p-4 mb-4">
+      <div class="flex items-center gap-2 mb-2">
+        <div class="text-2xl">👀</div>
+        <div>
+          <div class="font-black text-base">Resultados de los rivales</div>
+          <div class="text-xs" style="color:var(--text-dim)">Elige un partido y mira qué marcador ha puesto cada persona.</div>
+        </div>
+      </div>
+      <div class="text-[10px] mt-3 p-3 rounded-lg" style="background:rgba(0,255,136,0.05); border:1px solid rgba(0,255,136,0.15); color:var(--text-dim)">
+        De momento se comparan los partidos de <b>fase de grupos</b>, porque son comunes para todos. En eliminatorias cada jugador puede tener cruces distintos según su bracket.
+      </div>
+    </div>
+
+    <div class="card p-4 mb-4">
+      <div class="text-xs font-bold uppercase tracking-wider mb-2" style="color:var(--text-dim)">Seleccionar partido</div>
+      ${renderSelectorPartidos(selectedMid)}
+    </div>
+
+    <div class="card p-4 mb-4 glow-grass">
+      <div class="flex items-center justify-between text-[10px] mb-3" style="color:var(--text-dim)">
+        <span class="font-bold">Jornada ${jornada} · Grupo ${grupo} · ${fecha}</span>
+        <span>${rivales.length} rival${rivales.length !== 1 ? 'es' : ''}</span>
+      </div>
+      <div class="flex items-center gap-3">
+        <div class="flex-1 min-w-0 flex items-center gap-2">
+          <span class="flag">${eqL.flag}</span>
+          <div class="font-bold text-sm truncate">${eqL.name}</div>
+        </div>
+        <div class="text-xs font-black" style="color:var(--text-dim)">VS</div>
+        <div class="flex-1 min-w-0 flex items-center gap-2 justify-end text-right">
+          <div class="font-bold text-sm truncate">${eqV.name}</div>
+          <span class="flag">${eqV.flag}</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="grid grid-cols-3 gap-2 mb-4">
+      <div class="card-2 p-3 text-center">
+        <div class="font-black text-lg" style="color:var(--grass)">${conteoTend['1']}</div>
+        <div class="text-[10px]" style="color:var(--text-dim)">victoria local</div>
+      </div>
+      <div class="card-2 p-3 text-center">
+        <div class="font-black text-lg" style="color:var(--gold)">${conteoTend['X']}</div>
+        <div class="text-[10px]" style="color:var(--text-dim)">empate</div>
+      </div>
+      <div class="card-2 p-3 text-center">
+        <div class="font-black text-lg" style="color:var(--danger)">${conteoTend['2']}</div>
+        <div class="text-[10px]" style="color:var(--text-dim)">victoria visitante</div>
+      </div>
+    </div>
+
+    ${miPred && miPred.gl != null && miPred.gv != null ? `
+      <div class="card p-3 mb-4" style="background:rgba(255,200,87,0.06); border-color:rgba(255,200,87,0.2)">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <div class="text-[10px] font-bold uppercase tracking-wider" style="color:var(--gold)">Tu predicción</div>
+            <div class="font-black text-xl mt-1">${miPred.gl} - ${miPred.gv}</div>
+          </div>
+          ${pillTendencia(tendencia(miPred.gl, miPred.gv))}
+        </div>
+      </div>` : ''}
+
+    <div class="card overflow-hidden">
+      <div class="px-4 py-3 flex items-center justify-between" style="border-bottom:1px solid var(--border)">
+        <div class="font-bold text-sm">Predicciones de los demás</div>
+        <div class="text-[10px]" style="color:var(--text-dim)">${marcadorTop ? `más repetido: ${marcadorTop[0]}` : 'sin datos'}</div>
+      </div>
+      ${rivales.length === 0 ? `
+        <div class="p-8 text-center">
+          <div class="text-4xl mb-2">🤷‍♂️</div>
+          <div class="font-bold mb-1">Nadie más ha pronosticado este partido</div>
+          <div class="text-sm" style="color:var(--text-dim)">Prueba con otro partido o espera a que se guarden más predicciones.</div>
+        </div>` : rivales.map(({user, pred}) => {
+          const t = tendencia(pred.gl, pred.gv);
+          return `
+            <div class="px-4 py-3 flex items-center gap-3 border-t" style="border-color:var(--border)">
+              <div class="w-9 h-9 rounded-full flex items-center justify-center font-black text-xs" style="background:var(--bg-card-2); color:var(--grass)">${user.nombre.slice(0,2).toUpperCase()}</div>
+              <div class="flex-1 min-w-0">
+                <div class="font-bold text-sm truncate">${user.nombre}</div>
+                <div class="text-[10px]" style="color:var(--text-dim)">${tendenciaTexto(t)}</div>
+              </div>
+              <div class="text-right">
+                <div class="font-black text-xl">${pred.gl} - ${pred.gv}</div>
+                <div class="mt-1">${pillTendencia(t)}</div>
+              </div>
+            </div>`;
+        }).join('')}
+    </div>
+  `;
+
+  $('#rival-match-select').addEventListener('change', e => {
+    State.rivalesMatchId = e.target.value;
+    renderRivales();
+  });
 }
 
 // ═══════════════════════════════════════════════════════════════

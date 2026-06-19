@@ -724,16 +724,32 @@ async function cargarPredicciones(uid) {
 
 async function cargarTodasPredicciones() {
   if (!SUPA_ON) { State.allUsers = []; State.allPredicciones = {}; return; }
-  const { data: users } = await supa.from('usuarios').select('id, nombre');
-  State.allUsers = users || [];
-  const { data: preds } = await supa.from('predicciones').select('*');
+  
+  // Descargamos usuarios y predicciones a la vez para ir a tope de velocidad
+  const [resUsers, resPreds] = await Promise.all([
+    supa.from('usuarios').select('id, nombre'),
+    supa.from('predicciones').select('*')
+  ]);
+  
+  State.allUsers = resUsers.data || [];
   State.allPredicciones = {};
-  (preds||[]).forEach(p => {
+  
+  (resPreds.data || []).forEach(p => {
     if (!State.allPredicciones[p.user_id]) State.allPredicciones[p.user_id] = {};
+    
+    // Parche de seguridad: si el ID del partido empieza por letra (A1, B3...), es fase de grupos sí o sí
+    let faseCorregida = p.fase;
+    if (['A','B','C','D','E','F','G','H','I','J','K','L'].includes(p.match_id[0])) {
+      faseCorregida = 'grupos';
+    }
+
     State.allPredicciones[p.user_id][p.match_id] = {
-      gl: p.gol_local, gv: p.gol_visitante,
-      cuota: parseFloat(p.cuota_apostada), mult: parseFloat(p.multiplicador), tend: p.tendencia,
-      fase: p.fase
+      gl: p.gol_local,
+      gv: p.gol_visitante,
+      cuota: p.cuota_apostada ? parseFloat(p.cuota_apostada) : null,
+      mult: p.multiplicador ? parseFloat(p.multiplicador) : null,
+      tend: p.tendencia,
+      fase: faseCorregida
     };
   });
 }
@@ -1693,23 +1709,17 @@ function renderPremios() {
 async function renderLeaderboard() {
   const main = $('#main');
   main.innerHTML = `<div class="card p-6 text-center skel" style="height:200px"></div>`;
-  await cargarTodasPredicciones();
-  await cargarTodosPremios();
-  await cargarResultados();
-  await cargarResultadosPremios();
+  
+  // CONGELAMOS AQUÍ: No se calcula el ranking hasta que todo esté descargado
+  await Promise.all([
+    cargarTodasPredicciones(),
+    cargarTodosPremios(),
+    cargarResultados(),
+    cargarResultadosPremios()
+  ]);
+  
   const { filas, masterId } = calcularLeaderboard();
   const hayResultados = Object.keys(State.resultados).length > 0;
-
-  if (filas.length === 0) {
-    main.innerHTML = `
-      <div class="card p-8 text-center">
-        <div class="text-4xl mb-2">🏆</div>
-        <div class="font-bold mb-1">Aún no hay nadie en la clasificación</div>
-        <div class="text-sm" style="color:var(--text-dim)">${SUPA_ON ? 'Comparte el link con la cuadrilla' : 'Modo offline — sin clasificación compartida'}</div>
-      </div>`;
-    return;
-  }
-
   main.innerHTML = `
     ${!hayResultados ? `
       <div class="card p-4 mb-4 text-sm" style="background:rgba(0,255,136,0.06); border-color:rgba(0,255,136,0.2)">
@@ -1808,20 +1818,15 @@ function renderSelectorPartidos(selectedMid) {
   `;
 }
 
-async function renderRivales() {
-  const main = $('#main');
+main.innerHTML = `<div class="card p-6 text-center skel" style="height:200px"></div>`;
+  
+  // Aseguramos que al mirar los rivales también tengamos los datos frescos de la nube
+  await Promise.all([
+    cargarTodasPredicciones(),
+    cargarResultados()
+  ]);
 
-  if (prediccionesAbiertas()) {
-    main.innerHTML = `
-      <div class="card p-8 text-center">
-        <div class="text-5xl mb-3">🔒</div>
-        <div class="font-bold text-base mb-2">Resultados rivales bloqueados</div>
-        <div class="text-sm" style="color:var(--text-dim)">
-          Para evitar copiar resultados, esta pestaña se desbloquea cuando se cierren las predicciones.
-        </div>
-      </div>`;
-    return;
-  }
+  let selectedMid = State.rivalesMatchId || PARTIDOS_GRUPOS[0][0];
 
   if (!SUPA_ON) {
     main.innerHTML = `

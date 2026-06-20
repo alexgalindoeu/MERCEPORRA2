@@ -721,7 +721,7 @@ async function cargarPredicciones(uid) {
   State.predicciones = LS.loadPred(uid);
 }
 
-async function cargarTodasPredicciones()async function cargarTodasPredicciones() {
+async function cargarTodasPredicciones() {
   if (!SUPA_ON) { State.allUsers = []; State.allPredicciones = {}; return; }
   const { data: users } = await supa.from('usuarios').select('id, nombre');
   State.allUsers = users || [];

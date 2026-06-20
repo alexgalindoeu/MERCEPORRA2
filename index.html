@@ -721,13 +721,28 @@ async function cargarPredicciones(uid) {
   State.predicciones = LS.loadPred(uid);
 }
 
-async function cargarTodasPredicciones() {
+async function cargarTodasPredicciones()async function cargarTodasPredicciones() {
   if (!SUPA_ON) { State.allUsers = []; State.allPredicciones = {}; return; }
   const { data: users } = await supa.from('usuarios').select('id, nombre');
   State.allUsers = users || [];
-  const { data: preds } = await supa.from('predicciones').select('*');
+
+  // Supabase limita a 1000 filas por petición. Paginamos para traer TODAS.
+  let allPreds = [];
+  let from = 0;
+  const pageSize = 1000;
+  while (true) {
+    const { data: preds, error } = await supa
+      .from('predicciones')
+      .select('*')
+      .range(from, from + pageSize - 1);
+    if (error || !preds || preds.length === 0) break;
+    allPreds = allPreds.concat(preds);
+    if (preds.length < pageSize) break;
+    from += pageSize;
+  }
+
   State.allPredicciones = {};
-  (preds||[]).forEach(p => {
+  allPreds.forEach(p => {
     if (!State.allPredicciones[p.user_id]) State.allPredicciones[p.user_id] = {};
     State.allPredicciones[p.user_id][p.match_id] = {
       gl: p.gol_local, gv: p.gol_visitante,

@@ -1160,7 +1160,10 @@ async function calcularHighlights() {
   const deltas = [];
   const plenos = [];
   State.allUsers.forEach(u => {
-    const preds = State.allPredicciones[u.id] || {};
+  const preds = State.allPredicciones[u.id] || {};
+    // Si el usuario no tiene predicciones de grupos, lo saltamos
+    const tieneGrupos = Object.values(preds).some(p => p.fase === 'grupos');
+    if (!tieneGrupos) return;
     let delta = 0;
     recientes.forEach(r => {
       const pred = preds[r.match_id];
@@ -1190,12 +1193,18 @@ async function calcularHighlights() {
   };
 }
 function calcularLeaderboard() {
-  const filas = State.allUsers.map(u => {
-    const preds = State.allPredicciones[u.id] || {};
-    const prem  = State.allPremios[u.id] || {};
-    const score = puntuarUsuario(preds, prem);
-    return { ...u, ...score };
-  });
+  const filas = State.allUsers
+    .filter(u => {
+      // Excluir usuarios sin predicciones (admin u otros que no jueguen)
+      const preds = State.allPredicciones[u.id] || {};
+      return Object.values(preds).some(p => p.fase === 'grupos');
+    })
+    .map(u => {
+      const preds = State.allPredicciones[u.id] || {};
+      const prem  = State.allPremios[u.id] || {};
+      const score = puntuarUsuario(preds, prem);
+      return { ...u, ...score };
+    });
   filas.sort((a,b) => b.total - a.total || b.aciertosE - a.aciertosE);
   // Underdog master: el de mayor puntuación underdog (si >0)
   let masterId = null, max = 0;

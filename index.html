@@ -1134,7 +1134,61 @@ function puntuarUsuario(predicciones, premiosUser) {
     premios: Math.round(premios*10)/10,
   };
 }
+// ═══════════════════════════════════════════════════════════════
+// HIGHLIGHTS DE LAS ÚLTIMAS 24H
+// ═══════════════════════════════════════════════════════════════
+async function calcularHighlights() {
+  if (!SUPA_ON) return null;
+  if (Object.keys(State.resultados).length === 0) return null;
 
+  // Traer resultados con updated_at para filtrar por últimas 24h
+  const { data: resData } = await supa.from('resultados').select('*');
+  if (!resData) return null;
+  const desde = Date.now() - 24 * 60 * 60 * 1000;
+  const recientes = resData.filter(r => new Date(r.updated_at).getTime() >= desde);
+  if (recientes.length === 0) return null;
+
+  // Resumen de los partidos jugados en las últimas 24h
+  const partidosLista = recientes.map(r => {
+    const p = PARTIDOS_GRUPOS.find(x => x[0] === r.match_id);
+    if (!p) return null;
+    const eqL = EQUIPOS[p[2]], eqV = EQUIPOS[p[3]];
+    return `${eqL.flag}${eqV.flag} ${r.gol_local}-${r.gol_visitante}`;
+  }).filter(x => x);
+
+  // Calcular delta de cada jugador en estos partidos
+  const deltas = [];
+  const plenos = [];
+  State.allUsers.forEach(u => {
+    const preds = State.allPredicciones[u.id] || {};
+    let delta = 0;
+    recientes.forEach(r => {
+      const pred = preds[r.match_id];
+      if (!pred || pred.fase !== 'grupos') return;
+      const tendReal = tendencia(r.gol_local, r.gol_visitante);
+      if (pred.tend !== tendReal) return;
+      let pts = PUNTOS_BASE * (pred.mult || 1);
+      if (pred.gl === r.gol_local && pred.gv === r.gol_visitante) {
+        pts += BONUS_EXACTO;
+        plenos.push({ nombre: u.nombre, partido: r.match_id });
+      }
+      delta += pts;
+    });
+    deltas.push({ nombre: u.nombre, delta });
+  });
+
+  deltas.sort((a, b) => b.delta - a.delta);
+  const topPlus = deltas[0] && deltas[0].delta > 0 ? deltas[0] : null;
+  const topMinus = deltas[deltas.length - 1] && deltas[deltas.length - 1].delta < (topPlus?.delta || 0) ? deltas[deltas.length - 1] : null;
+
+  return {
+    partidos: recientes.length,
+    resumenPartidos: partidosLista.join(' · '),
+    topPlus,
+    topMinus,
+    plenos: plenos.slice(0, 5) // máximo 5 plenos para no llenar
+  };
+}
 function calcularLeaderboard() {
   const filas = State.allUsers.map(u => {
     const preds = State.allPredicciones[u.id] || {};
@@ -1714,6 +1768,8 @@ async function renderLeaderboard() {
   await cargarResultadosPremios();
   const { filas, masterId } = calcularLeaderboard();
   const hayResultados = Object.keys(State.resultados).length > 0;
+  // ──── HIGHLIGHTS DEL DÍA (últimas 24h) ────
+  const highlights = await calcularHighlights();
 
   if (filas.length === 0) {
     main.innerHTML = `
@@ -1731,6 +1787,40 @@ async function renderLeaderboard() {
         <div class="font-bold mb-1" style="color:var(--grass)">⏳ Esperando el inicio del Mundial</div>
         <div style="color:var(--text-dim)">La clasificación se irá actualizando según se metan resultados oficiales. ${filas.length} jugador${filas.length>1?'es':''} ya tiene${filas.length>1?'n':''} predicciones cargadas.</div>
       </div>` : ''}
+  ${highlights ? `
+      <div class="card p-4 mb-4" style="background:linear-gradient(135deg, rgba(255,200,87,0.08), rgba(0,255,136,0.04)); border-color:rgba(255,200,87,0.3)">
+        <div class="flex items-center gap-2 mb-3">
+          <span class="text-xl">🔥</span>
+          <div class="font-black text-sm" style="color:var(--gold)">HIGHLIGHTS DE LAS ÚLTIMAS 24H</div>
+        </div>
+        <div class="text-xs mb-3" style="color:var(--text-dim)">
+          ${highlights.partidos} partido${highlights.partidos>1?'s':''} jugado${highlights.partidos>1?'s':''}: ${highlights.resumenPartidos}
+        </div>
+        <div class="grid grid-cols-2 gap-2">
+          <div class="card-2 p-3">
+            <div class="text-[10px] uppercase font-bold tracking-wider mb-1" style="color:var(--grass)">🚀 El que más sumó</div>
+            ${highlights.topPlus ? `
+              <div class="font-black text-base truncate">${highlights.topPlus.nombre}</div>
+              <div class="text-sm font-bold" style="color:var(--grass)">+${highlights.topPlus.delta.toFixed(1)} pts</div>
+            ` : '<div class="text-xs" style="color:var(--text-dim)">nadie sumó</div>'}
+          </div>
+          <div class="card-2 p-3">
+            <div class="text-[10px] uppercase font-bold tracking-wider mb-1" style="color:var(--danger)">🪦 El que menos sumó</div>
+            ${highlights.topMinus ? `
+              <div class="font-black text-base truncate">${highlights.topMinus.nombre}</div>
+              <div class="text-sm font-bold" style="color:var(--danger)">+${highlights.topMinus.delta.toFixed(1)} pts</div>
+            ` : ''}
+          </div>
+        </div>
+        ${highlights.plenos.length > 0 ? `
+          <div class="mt-3 pt-3" style="border-top:1px solid var(--border)">
+            <div class="text-[10px] uppercase font-bold tracking-wider mb-2" style="color:var(--gold)">🎯 Marcador exacto clavado</div>
+            <div class="flex flex-wrap gap-1">
+              ${highlights.plenos.map(p => `<span class="pill pill-x14">${p.nombre} (${p.partido})</span>`).join('')}
+            </div>
+          </div>` : ''}
+      </div>
+    ` : ''}
     <div class="card overflow-hidden">
       <div class="px-4 py-3 flex items-center justify-between" style="border-bottom:1px solid var(--border)">
         <div class="font-bold text-sm">Clasificación general</div>
